@@ -22,6 +22,7 @@ il tombe en panne sous garantie… Custos Domus garde tout cela pour vous, et vo
 - **Historique** : chaque entretien réalisé et chaque réparation, avec note, coût, intervenant et documents.
 - **Tableau de bord** : en retard, à planifier, rendez-vous à venir, garanties qui expirent, coûts de l'année.
 - **Rappels** : par e-mail, notification sur le téléphone, et dans son agenda (flux iCal).
+- **Sauvegardes** : une sauvegarde complète chaque nuit sur le serveur, téléchargeable et restaurable en un clic.
 - **Comptes** : admin et écriture ; invitation par lien.
 
 ## Installer (Docker)
@@ -34,6 +35,13 @@ docker compose up -d
 
 Puis ouvrir `http://<serveur>:3000` : le premier compte créé est l'administrateur principal. Réglages facultatifs : voir
 [.env.exemple](.env.exemple) ; derrière un reverse proxy HTTPS, voir [docker/nginx-exemple.conf](docker/nginx-exemple.conf).
+
+Ensuite, dans l'application :
+
+- **Notifications** : un admin y règle l'envoi des e-mails (Mailjet ou SMTP) et l'adresse publique de l'application ;
+  chacun y choisit ses rappels, active les notifications sur son téléphone (HTTPS requis) et abonne son agenda.
+- **Sauvegarde** : les sauvegardes de la nuit restent sur le même disque que les données ; recopier le dossier `data/`
+  ailleurs avec les sauvegardes habituelles du serveur.
 
 ## Développement
 

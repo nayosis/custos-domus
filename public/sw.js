@@ -15,8 +15,8 @@ self.addEventListener("push", (e) => {
   e.waitUntil(
     self.registration.showNotification(d.titre || "Custos Domus", {
       body: d.corps || "",
-      icon: "/icone.svg",
-      badge: "/icone.svg",
+      icon: "/icone-192.png",
+      badge: "/badge-96.png",
       lang: "fr",
       tag: "custos-rappels",
       renotify: true,

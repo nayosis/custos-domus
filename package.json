@@ -1,7 +1,7 @@
 {
   "name": "custos-domus",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Custos Domus, le gardien de la maison : logiciel libre de suivi de l'entretien de ses maisons (équipements, entretiens périodiques, réparations, factures et garanties, rappels).",
   "license": "AGPL-3.0-or-later",
   "repository": "github:nayosis/custos-domus",
@@ -35,6 +35,7 @@
     "web-push": "3.6.7"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "2.6.2",
     "@types/bun": "^1.4.2",
     "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.1.8",
