@@ -9,8 +9,11 @@ export class ErreurServeur extends Error {
   }
 }
 
-/** Identifiant de cet onglet : il ne se recharge pas pour les événements de ses propres écritures. */
-export const ID_CLIENT = crypto.randomUUID();
+/**
+ * Identifiant de cet onglet : il ne se recharge pas pour les événements de ses propres écritures.
+ * Pas de crypto.randomUUID : absent en HTTP simple (http://192.168.x.x), où la page restait blanche.
+ */
+export const ID_CLIENT = Array.from(crypto.getRandomValues(new Uint8Array(16)), (o) => o.toString(16).padStart(2, "0")).join("");
 
 type Rappel = (e: ErreurServeur) => void;
 const PAGES_PUBLIQUES = ["/connexion", "/lien/"];
