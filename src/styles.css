@@ -23,6 +23,20 @@ body,
   }
 }
 
+/*
+ * Écrans tactiles : champs en 16 px. En dessous, Safari (iPhone, iPad) agrandit la page à chaque saisie,
+ * et l'application installée sur l'écran d'accueil ne revient pas toujours à sa largeur.
+ */
+@media (hover: none) and (pointer: coarse) {
+  .mantine-Input-input,
+  .mantine-PillsInput-input,
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
 /* Tuiles cliquables (tableau de bord, maisons) */
 .tuile {
   transition: border-color 120ms ease, box-shadow 120ms ease;
