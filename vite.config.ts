@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import { readFileSync } from "node:fs";
 
 /** Modules de src/data/ exécutés par le serveur (même liste que serveur/rpc.ts). */
-const MODULES_RPC = ["maisons", "elements", "entretiens", "realisations", "prestataires", "documents"];
+const MODULES_RPC = ["tableauDeBord", "maisons", "elements", "entretiens", "realisations", "prestataires", "documents"];
 
 /**
  * Dans le navigateur, chaque module de src/data/ est remplacé par des « talons » :

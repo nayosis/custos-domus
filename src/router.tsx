@@ -48,7 +48,12 @@ const reserveAdmin = () => {
   if (!estAdmin()) throw redirect({ to: "/" });
 };
 
-const accueil = createRoute({ getParentRoute: () => application, path: "/", component: Accueil });
+export const accueilRoute = createRoute({
+  getParentRoute: () => application,
+  path: "/",
+  component: Accueil,
+  validateSearch: (s: Record<string, unknown>): { maison?: string } => (typeof s.maison === "string" ? { maison: s.maison } : {}),
+});
 const maisons = createRoute({ getParentRoute: () => application, path: "/maisons", component: Maisons });
 export const elementsRoute = createRoute({
   getParentRoute: () => application,
@@ -63,7 +68,7 @@ const comptes = createRoute({ getParentRoute: () => application, path: "/comptes
 const journal = createRoute({ getParentRoute: () => application, path: "/journal", component: surOrdinateur(Journal, "Journal"), beforeLoad: reserveAdmin });
 
 export const router = createRouter({
-  routeTree: racine.addChildren([connexionRoute, lienRoute, application.addChildren([accueil, maisons, elementsRoute, ficheElementRoute, prestataires, sauvegarde, comptes, journal])]),
+  routeTree: racine.addChildren([connexionRoute, lienRoute, application.addChildren([accueilRoute, maisons, elementsRoute, ficheElementRoute, prestataires, sauvegarde, comptes, journal])]),
   history: createBrowserHistory(),
 });
 

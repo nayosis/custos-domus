@@ -271,7 +271,7 @@ function ModalEntretien({ elementId, categorie, entretien, opened, onClose }: { 
 }
 
 /** Rendez-vous pris : date (facultative si pas encore fixée) et prestataire. */
-function ModalRdv({ entretien, onClose }: { entretien: LigneEntretien | null; onClose: () => void }) {
+export function ModalRdv({ entretien, onClose }: { entretien: LigneEntretien | null; onClose: () => void }) {
   const [dateRdv, setDateRdv] = useState<string | null>(null);
   const [prestataireId, setPrestataireId] = useState<string | null>(null);
   const [cle, setCle] = useState<string | null>(null);
