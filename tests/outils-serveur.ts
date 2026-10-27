@@ -1,11 +1,13 @@
 /** Serveur de test : bases en mémoire, super admin, et petits outils pour appeler l'API avec un cookie. */
 import { join } from "node:path";
-import { ouvrirBase } from "../serveur/base";
+import { fermerBase, ouvrirBase } from "../serveur/base";
 import { installerSuperAdmin, ouvrirComptes } from "../serveur/comptes";
 
 export const SUPER = { email: "super@custos.test", motDePasse: "super-mot-de-passe" };
 
 export async function serveurDeTest({ superAdmin = true } = {}) {
+  // La base d'un fichier de tests précédent reste sinon ouverte (et verrouillée sous Windows).
+  fermerBase();
   ouvrirBase(":memory:", join(import.meta.dir, "..", "drizzle"));
   ouvrirComptes(":memory:");
   if (superAdmin) await installerSuperAdmin(SUPER.email, SUPER.motDePasse);

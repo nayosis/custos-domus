@@ -5,8 +5,8 @@
 import webpush from "web-push";
 import { baseComptes, emailValide } from "./comptes";
 
-const lire = (cle: string) => baseComptes().query<{ valeur: string }, [string]>("SELECT valeur FROM reglage WHERE cle = ?").get(cle)?.valeur ?? null;
-const ecrire = (cle: string, valeur: string) =>
+export const lireReglage = (cle: string) => baseComptes().query<{ valeur: string }, [string]>("SELECT valeur FROM reglage WHERE cle = ?").get(cle)?.valeur ?? null;
+export const ecrireReglage = (cle: string, valeur: string) =>
   baseComptes().query("INSERT INTO reglage (cle, valeur) VALUES (?, ?) ON CONFLICT (cle) DO UPDATE SET valeur = excluded.valeur").run(cle, valeur);
 
 // --- Envoi des e-mails (réglé par un admin dans l'application)
@@ -30,7 +30,7 @@ const ENVOI_VIDE: ConfigEnvoi = {
 };
 
 export function configEnvoi(): ConfigEnvoi {
-  const brut = lire("envoi");
+  const brut = lireReglage("envoi");
   if (!brut) return structuredClone(ENVOI_VIDE);
   const c = JSON.parse(brut) as Partial<ConfigEnvoi>;
   return { ...ENVOI_VIDE, ...c, mailjet: { ...ENVOI_VIDE.mailjet, ...c.mailjet }, smtp: { ...ENVOI_VIDE.smtp, ...c.smtp } };
@@ -66,7 +66,7 @@ export function enregistrerConfigEnvoi(nouvelle: ConfigEnvoi): string | null {
   if (c.urlApplication && !/^https?:\/\/[^\s/]+/.test(c.urlApplication)) return "Adresse de l'application invalide (https://…).";
   if (c.fournisseur === "mailjet" && (!c.mailjet.cleApi || !c.mailjet.cleSecrete)) return "Clé API et clé secrète Mailjet requises.";
   if (c.fournisseur === "smtp" && (!c.smtp.hote || !Number.isInteger(c.smtp.port) || c.smtp.port < 1 || c.smtp.port > 65535)) return "Serveur SMTP et port requis.";
-  ecrire("envoi", JSON.stringify(c));
+  ecrireReglage("envoi", JSON.stringify(c));
   return null;
 }
 
@@ -75,17 +75,17 @@ export const envoiEmailPossible = () => configEnvoi().fournisseur !== "aucun";
 // --- Notifications push : clés VAPID, créées au premier besoin
 
 export function clesVapid() {
-  const brut = lire("vapid");
+  const brut = lireReglage("vapid");
   if (brut) return JSON.parse(brut) as { publicKey: string; privateKey: string };
   const cles = webpush.generateVAPIDKeys();
-  ecrire("vapid", JSON.stringify(cles));
+  ecrireReglage("vapid", JSON.stringify(cles));
   return cles;
 }
 
 // --- Dernière tournée des rappels (date « AAAA-MM-JJ »)
 
-export const derniereTournee = () => lire("derniere_tournee");
-export const noterTournee = (jour: string) => ecrire("derniere_tournee", jour);
+export const derniereTournee = () => lireReglage("derniere_tournee");
+export const noterTournee = (jour: string) => ecrireReglage("derniere_tournee", jour);
 
 // --- Préférences de chacun
 

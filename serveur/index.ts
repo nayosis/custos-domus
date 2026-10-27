@@ -3,6 +3,7 @@ import { ouvrirBase } from "./base";
 import { installerSuperAdmin, ouvrirComptes } from "./comptes";
 import { BASE_COMPTES, BASE_DONNEES, DOSSIER_DONNEES, DOSSIER_MIGRATIONS, FUSEAU, PORT, preparerDossiers } from "./config";
 import { planifierRappels } from "./rappels";
+import { planifierSauvegardes } from "./sauvegardeAuto";
 import { definirFuseau } from "../src/lib/dates";
 
 definirFuseau(FUSEAU);
@@ -18,3 +19,5 @@ console.log(`Custos Domus : http://localhost:${PORT} (données : ${DOSSIER_DONNE
 
 // Rappels : tournée chaque jour à 8 h (fuseau de l'installation).
 planifierRappels();
+// Sauvegarde complète chaque nuit dans data/sauvegardes.
+planifierSauvegardes();

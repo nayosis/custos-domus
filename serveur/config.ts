@@ -7,6 +7,10 @@ export const DOSSIER_DONNEES = resolve(process.env.DOSSIER_DONNEES ?? join(impor
 export const DOSSIER_FICHIERS = join(DOSSIER_DONNEES, "fichiers");
 export const BASE_DONNEES = join(DOSSIER_DONNEES, "donnees.db");
 export const BASE_COMPTES = join(DOSSIER_DONNEES, "comptes.db");
+/** Sauvegardes automatiques de chaque nuit (dans le volume des données : à recopier ailleurs). */
+export const DOSSIER_SAUVEGARDES = join(DOSSIER_DONNEES, "sauvegardes");
+/** Nombre de sauvegardes automatiques gardées (les plus anciennes sont effacées). */
+export const SAUVEGARDES_CONSERVEES = Math.max(1, Number(process.env.CUSTOS_SAUVEGARDES_CONSERVEES) || 14);
 
 /** Front compilé (vite build), servi par le même serveur en production. */
 export const DOSSIER_CLIENT = resolve(process.env.DOSSIER_CLIENT ?? join(import.meta.dir, "..", "dist"));
@@ -28,4 +32,5 @@ export const VERIFIER_MISES_A_JOUR = !["non", "no", "false", "0"].includes((proc
 
 export function preparerDossiers() {
   mkdirSync(DOSSIER_FICHIERS, { recursive: true });
+  mkdirSync(DOSSIER_SAUVEGARDES, { recursive: true });
 }

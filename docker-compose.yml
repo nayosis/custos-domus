@@ -13,6 +13,8 @@ services:
       SUPER_ADMIN_MOT_DE_PASSE: ${SUPER_ADMIN_MOT_DE_PASSE:-}
       # Facultatif : « non » pour ne pas vérifier sur GitHub qu'une nouvelle version existe.
       CUSTOS_VERIFIER_MISES_A_JOUR: ${CUSTOS_VERIFIER_MISES_A_JOUR:-}
+      # Sauvegardes automatiques gardées dans data/sauvegardes (une par nuit).
+      CUSTOS_SAUVEGARDES_CONSERVEES: ${CUSTOS_SAUVEGARDES_CONSERVEES:-14}
       # Fuseau horaire : sert aux échéances et à l'heure d'envoi des rappels.
       TZ: ${TZ:-Europe/Paris}
     volumes:

@@ -12,6 +12,8 @@ import { diffuser, fluxEvenements } from "./evenements";
 import { journaliser, lireJournal } from "./journal";
 import { etatMiseAJour } from "./miseAJour";
 import { routesRappels } from "./routesRappels";
+import { cheminSauvegarde, etatSauvegardeAuto, listeSauvegardes, nomSauvegardeValide, sauvegardeDeNuit } from "./sauvegardeAuto";
+import { SAUVEGARDES_CONSERVEES } from "./config";
 import { contexteRequete } from "./tracabilite";
 import { Conflit } from "../src/lib/conflit";
 
@@ -143,6 +145,36 @@ export function creerApp() {
             "cache-control": "no-store",
           },
         });
+      })
+      // Sauvegardes automatiques (dossier data/sauvegardes) : liste, téléchargement, sauvegarde immédiate
+      .get("/api/sauvegarde/automatiques", ({ utilisateur }) => {
+        exiger(utilisateur, "admin");
+        return { sauvegardes: listeSauvegardes(), derniere: etatSauvegardeAuto(), conservees: SAUVEGARDES_CONSERVEES };
+      })
+      .post("/api/sauvegarde/automatiques", async ({ utilisateur }) => {
+        exiger(utilisateur, "admin");
+        const e = await sauvegardeDeNuit(new Date(), "manuelle");
+        if (e.erreur) throw new ErreurMetier(e.erreur, 500);
+        return { nom: e.nom, taille: e.taille };
+      })
+      .get("/api/sauvegarde/automatiques/:nom", ({ utilisateur, params }) => {
+        exiger(utilisateur, "admin");
+        if (!nomSauvegardeValide(params.nom) || !existsSync(cheminSauvegarde(params.nom))) throw new ErreurMetier("Sauvegarde introuvable", 404);
+        return new Response(Bun.file(cheminSauvegarde(params.nom)), {
+          headers: { "content-type": "application/zip", "content-disposition": `attachment; filename="${params.nom}"`, "cache-control": "no-store" },
+        });
+      })
+      .post("/api/sauvegarde/automatiques/:nom/restaurer", async ({ utilisateur, params }) => {
+        const u = exiger(utilisateur, "admin");
+        if (!u.super) throw new ErreurMetier("Seul le super admin peut restaurer une sauvegarde.", 403);
+        if (!nomSauvegardeValide(params.nom) || !existsSync(cheminSauvegarde(params.nom))) throw new ErreurMetier("Sauvegarde introuvable", 404);
+        try {
+          const r = await restaurer(Bun.file(cheminSauvegarde(params.nom)));
+          diffuser({ type: "restauration", par: u.email });
+          return r;
+        } catch (e) {
+          throw new ErreurMetier((e as Error).message);
+        }
       })
       .post(
         "/api/sauvegarde/restaurer",

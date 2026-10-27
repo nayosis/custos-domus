@@ -53,7 +53,7 @@ Modèle d'entretien ── bibliothèque appliquée en un clic à un élément
 3. Entretiens et réalisations (fait) : flux tâche et rendez-vous, réparations, bibliothèque de 21 modèles (migration 0001), historique avec pièces jointes, remplacement.
 4. Tableau de bord (fait) : retard, à prévoir, rendez-vous, prochainement (3 mois), garanties, dernières interventions, dépenses de l'année ; filtre maison.
 5. Rappels (fait) : tournée quotidienne à 8 h (jours manqués rattrapés, une semaine au plus), e-mail (Mailjet ou SMTP, réglé par un admin), push PWA (service worker `public/sw.js`, clés VAPID créées au premier besoin), flux iCal par lien secret. Réglages et préférences dans comptes.db.
-6. Sauvegarde automatique chaque nuit dans `/data/sauvegardes` (14 conservées).
+6. Sauvegarde automatique (fait) : chaque nuit à partir de 3 h dans `data/sauvegardes` (14 conservées, `CUSTOS_SAUVEGARDES_CONSERVEES`), même ZIP que la sauvegarde téléchargée ; liste, téléchargement et restauration depuis la page Sauvegarde ; fichiers orphelins effacés au bout de 7 jours.
 7. Publication : dépôt `nayosis/custos-domus`, image ghcr.io, déploiement sur Pikachu.
 
 V2 : ntfy, OCR facultatif des factures (désactivé par défaut : les documents sortiraient du serveur), mesures

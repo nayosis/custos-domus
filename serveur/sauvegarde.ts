@@ -73,11 +73,11 @@ function* blocsDe(chemin: string, taille = 1024 * 1024) {
 }
 
 /** ZIP de sauvegarde, produit au fil de l'eau (pas tout en mémoire). */
-export function fluxSauvegarde(): ReadableStream<Uint8Array> {
+export function fluxSauvegarde(motif = "export"): ReadableStream<Uint8Array> {
   const base = baseCourante();
   const copie = join(DOSSIER_DONNEES, `export-${crypto.randomUUID()}.db`);
   base.query("VACUUM INTO ?").run(copie);
-  const m = manifeste(base, "export");
+  const m = manifeste(base, motif);
   const fichiers = existsSync(DOSSIER_FICHIERS) ? readdirSync(DOSSIER_FICHIERS).filter(nomValide) : [];
   const nettoyer = () => existsSync(copie) && unlinkSync(copie);
 

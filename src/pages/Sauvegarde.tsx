@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Alert, Button, FileButton, Group, List, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
+import { ActionIcon, Alert, Badge, Button, FileButton, Group, List, Paper, SimpleGrid, Stack, Table, Text, Title, Tooltip } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { IconDatabaseExport, IconDatabaseImport, IconInfoCircle } from "@tabler/icons-react";
+import { IconAlertTriangle, IconClockHour3, IconDatabaseExport, IconDatabaseImport, IconDownload, IconHistory, IconInfoCircle } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { appelApi, ErreurServeur } from "../lib/rpc";
 import { utilisateur } from "../lib/session";
@@ -37,6 +37,102 @@ function Chiffres({ c }: { c: Compteurs }) {
   );
 }
 
+type Automatiques = {
+  sauvegardes: { nom: string; taille: number; le: string }[];
+  derniere: { jour: string; le: string; nom?: string; erreur?: string; orphelins?: number } | null;
+  conservees: number;
+};
+
+const quand = (iso: string) => new Date(iso).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+/** Sauvegardes de chaque nuit, gardées sur le serveur : état de la dernière, liste, téléchargement, restauration. */
+function SauvegardesAutomatiques({ onRestaurer }: { onRestaurer: (nom: string) => void }) {
+  const moi = utilisateur();
+  const { data, refetch } = useQuery({ queryKey: ["sauvegardes-auto"], queryFn: () => appelApi<Automatiques>("/api/sauvegarde/automatiques") });
+  const [enCours, setEnCours] = useState(false);
+  const maintenant = async () => {
+    setEnCours(true);
+    try {
+      const s = await appelApi<{ nom: string; taille: number }>("/api/sauvegarde/automatiques", { corps: {} });
+      notifications.show({ color: "green", message: `Sauvegarde faite (${formaterTaille(s.taille)}).` });
+      await refetch();
+    } catch (e) {
+      notifications.show({ color: "red", title: "Sauvegarde impossible", message: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setEnCours(false);
+    }
+  };
+  if (!data) return null;
+  const { derniere } = data;
+  return (
+    <Paper withBorder p="md">
+      <Stack>
+        <Group justify="space-between">
+          <Group gap="xs">
+            <IconHistory size={20} />
+            <Text fw={600}>Sauvegardes automatiques</Text>
+          </Group>
+          <Button size="xs" variant="default" loading={enCours} onClick={maintenant}>
+            Sauvegarder maintenant
+          </Button>
+        </Group>
+        <Text size="sm" c="dimmed">
+          Chaque nuit vers 3 h, une sauvegarde complète est gardée sur le serveur (les {data.conservees} dernières). Elles sont sur le même disque que les données : recopiez
+          régulièrement le dossier <code>data/sauvegardes</code> ailleurs (ou téléchargez-en une).
+        </Text>
+        {derniere?.erreur ? (
+          <Alert color="red" icon={<IconAlertTriangle size={16} />} title={`Échec de la sauvegarde du ${quand(derniere.le)}`}>
+            {derniere.erreur} — nouvel essai dans l'heure.
+          </Alert>
+        ) : derniere ? (
+          <Group gap="xs">
+            <Badge color="green" variant="light" leftSection={<IconClockHour3 size={12} />} style={{ textTransform: "none" }}>
+              Dernière sauvegarde : {quand(derniere.le)}
+            </Badge>
+            {!!derniere.orphelins && (
+              <Text size="xs" c="dimmed">
+                {derniere.orphelins} fichier(s) orphelin(s) effacé(s)
+              </Text>
+            )}
+          </Group>
+        ) : (
+          <Text size="sm" c="dimmed">
+            La première sauvegarde automatique se fera cette nuit.
+          </Text>
+        )}
+        {data.sauvegardes.length > 0 && (
+          <Table verticalSpacing={6} highlightOnHover>
+            <Table.Tbody>
+              {data.sauvegardes.map((s) => (
+                <Table.Tr key={s.nom}>
+                  <Table.Td fz="sm">{quand(s.le)}</Table.Td>
+                  <Table.Td fz="sm" c="dimmed" ta="right" style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {formaterTaille(s.taille)}
+                  </Table.Td>
+                  <Table.Td w={1} style={{ whiteSpace: "nowrap" }}>
+                    <Group gap={4} wrap="nowrap" justify="flex-end">
+                      {moi?.super && (
+                        <Button size="compact-xs" variant="subtle" color="red" onClick={() => onRestaurer(s.nom)}>
+                          Restaurer
+                        </Button>
+                      )}
+                      <Tooltip label="Télécharger">
+                        <ActionIcon variant="subtle" color="gray" component="a" href={`/api/sauvegarde/automatiques/${s.nom}`} download aria-label={`Télécharger ${s.nom}`}>
+                          <IconDownload size={16} />
+                        </ActionIcon>
+                      </Tooltip>
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        )}
+      </Stack>
+    </Paper>
+  );
+}
+
 /** Admins : télécharger une sauvegarde complète. Super admin : restaurer (y compris une sauvegarde d'une autre installation). */
 export function Sauvegarde() {
   const moi = utilisateur();
@@ -46,15 +142,15 @@ export function Sauvegarde() {
   });
   const [restauration, setRestauration] = useState(false);
 
-  const restaurer = (fichier: File | null) => {
+  const restaurer = (fichier: File | string | null) => {
     if (!fichier) return;
+    const libelle = typeof fichier === "string" ? `la sauvegarde automatique ${fichier}` : `${fichier.name} (${formaterTaille(fichier.size)})`;
     modals.openConfirmModal({
       title: "Remplacer toutes les données par cette sauvegarde ?",
       children: (
         <Stack gap="xs">
           <Text size="sm">
-            Toutes les données actuelles (maisons, éléments, entretiens, historique, documents…) seront remplacées par celles de <b>{fichier.name}</b> (
-            {formaterTaille(fichier.size)}).
+            Toutes les données actuelles (maisons, éléments, entretiens, historique, documents…) seront remplacées par celles de <b>{libelle}</b>.
           </Text>
           <Text size="sm" c="dimmed">
             La base actuelle est gardée sur le serveur (donnees.db.avant-restauration). Les comptes ne changent pas. Pensez à télécharger une
@@ -67,9 +163,14 @@ export function Sauvegarde() {
       onConfirm: async () => {
         setRestauration(true);
         try {
-          const f = new FormData();
-          f.append("fichier", fichier);
-          const r = await fetch("/api/sauvegarde/restaurer", { method: "POST", body: f, headers: { "x-custos": "1" }, credentials: "same-origin" });
+          let r: Response;
+          if (typeof fichier === "string") {
+            r = await fetch(`/api/sauvegarde/automatiques/${fichier}/restaurer`, { method: "POST", headers: { "x-custos": "1" }, credentials: "same-origin" });
+          } else {
+            const f = new FormData();
+            f.append("fichier", fichier);
+            r = await fetch("/api/sauvegarde/restaurer", { method: "POST", body: f, headers: { "x-custos": "1" }, credentials: "same-origin" });
+          }
           const corps = await r.json().catch(() => ({}));
           if (!r.ok) throw new ErreurServeur(corps.erreur ?? `Erreur ${r.status}`, r.status);
           const c = corps.installe as Compteurs;
@@ -110,6 +211,8 @@ export function Sauvegarde() {
           </Group>
         </Stack>
       </Paper>
+
+      <SauvegardesAutomatiques onRestaurer={restaurer} />
 
       {moi?.super ? (
         <Paper withBorder p="md">
