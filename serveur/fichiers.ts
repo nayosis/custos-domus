@@ -15,3 +15,8 @@ export async function supprimerFichier(nom: string) {
   const chemin = cheminFichier(nom);
   if (existsSync(chemin)) unlinkSync(chemin);
 }
+
+/** Fichiers sur le disque des documents supprimés avec leur fiche (élément, maison). */
+export async function supprimerFichiers(noms: string[]) {
+  for (const nom of noms) if (nomValide(nom)) await supprimerFichier(nom);
+}

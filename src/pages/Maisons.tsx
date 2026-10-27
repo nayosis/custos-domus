@@ -3,6 +3,7 @@ import { ActionIcon, Badge, Button, Card, Group, Menu, Modal, SimpleGrid, Stack,
 import { modals } from "@mantine/modals";
 import { IconArchive, IconDots, IconHome, IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { creerMaison, listeMaisons, majMaison, supprimerMaison } from "../data/maisons";
 import type { Maison } from "../db/schema";
 import { ecrire } from "../lib/query";
@@ -49,6 +50,7 @@ function ModalMaison({ maison, opened, onClose }: { maison: Maison | null; opene
 export function Maisons() {
   const { data: maisons = [] } = useQuery({ queryKey: ["maisons"], queryFn: () => listeMaisons() });
   const [edition, setEdition] = useState<{ maison: Maison | null } | null>(null);
+  const naviguer = useNavigate();
 
   const supprimer = (m: Maison) =>
     modals.openConfirmModal({
@@ -81,7 +83,7 @@ export function Maisons() {
       ) : (
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
           {maisons.map((m) => (
-            <Card key={m.id} withBorder className="tuile" opacity={m.archivee ? 0.6 : 1}>
+            <Card key={m.id} withBorder className="tuile ligne-cliquable" opacity={m.archivee ? 0.6 : 1} onClick={() => naviguer({ to: "/elements", search: { maison: m.id } })}>
               <Group justify="space-between" wrap="nowrap" align="flex-start">
                 <Group gap="sm" wrap="nowrap">
                   <IconHome size={22} color="var(--mantine-color-brique-6)" />
@@ -96,11 +98,11 @@ export function Maisons() {
                 </Group>
                 <Menu position="bottom-end">
                   <Menu.Target>
-                    <ActionIcon variant="subtle" color="gray" aria-label="Actions">
+                    <ActionIcon variant="subtle" color="gray" aria-label="Actions" onClick={(e) => e.stopPropagation()}>
                       <IconDots size={16} />
                     </ActionIcon>
                   </Menu.Target>
-                  <Menu.Dropdown>
+                  <Menu.Dropdown onClick={(e) => e.stopPropagation()}>
                     <Menu.Item leftSection={<IconPencil size={14} />} onClick={() => setEdition({ maison: m })}>
                       Modifier
                     </Menu.Item>
@@ -114,11 +116,16 @@ export function Maisons() {
                   </Menu.Dropdown>
                 </Menu>
               </Group>
-              {m.archivee && (
-                <Badge mt="sm" color="gray" variant="light">
-                  Archivée
-                </Badge>
-              )}
+              <Group gap="xs" mt="sm">
+                <Text size="sm" c="dimmed">
+                  {m.nbElements === 0 ? "Aucun élément" : `${m.nbElements} élément${m.nbElements > 1 ? "s" : ""}`}
+                </Text>
+                {m.archivee && (
+                  <Badge color="gray" variant="light">
+                    Archivée
+                  </Badge>
+                )}
+              </Group>
             </Card>
           ))}
         </SimpleGrid>

@@ -49,7 +49,7 @@ Modèle d'entretien ── bibliothèque appliquée en un clic à un élément
 ## Plan de la V1
 
 1. Socle (fait) : infrastructure reprise de Tabularium, comptes, sauvegarde, maisons, thème.
-2. Éléments, prestataires, documents (envoi, aperçu PDF et images, photo depuis le téléphone).
+2. Éléments, prestataires, documents (fait) : envoi, aperçu PDF et images, photo depuis le téléphone, type deviné.
 3. Entretiens et réalisations : flux tâche et rendez-vous, réparations, bibliothèque de modèles, historique, remplacement.
 4. Tableau de bord : retard, à planifier, rendez-vous, garanties, dernières interventions, coûts de l'année ; filtre maison.
 5. Rappels : tâche quotidienne, e-mail, push PWA, flux iCal.

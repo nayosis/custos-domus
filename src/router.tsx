@@ -3,7 +3,10 @@ import type { ReactNode } from "react";
 import { Layout } from "./components/Layout";
 import { SurOrdinateur } from "./components/SurOrdinateur";
 import { Accueil } from "./pages/Accueil";
+import { Elements } from "./pages/Elements";
+import { FicheElement } from "./pages/FicheElement";
 import { Maisons } from "./pages/Maisons";
+import { Prestataires } from "./pages/Prestataires";
 import { Sauvegarde } from "./pages/Sauvegarde";
 import { Connexion } from "./pages/compte/Connexion";
 import { Lien } from "./pages/compte/Lien";
@@ -47,12 +50,20 @@ const reserveAdmin = () => {
 
 const accueil = createRoute({ getParentRoute: () => application, path: "/", component: Accueil });
 const maisons = createRoute({ getParentRoute: () => application, path: "/maisons", component: Maisons });
+export const elementsRoute = createRoute({
+  getParentRoute: () => application,
+  path: "/elements",
+  component: Elements,
+  validateSearch: (s: Record<string, unknown>): { maison?: string } => (typeof s.maison === "string" ? { maison: s.maison } : {}),
+});
+export const ficheElementRoute = createRoute({ getParentRoute: () => application, path: "/elements/$id", component: FicheElement });
+const prestataires = createRoute({ getParentRoute: () => application, path: "/prestataires", component: Prestataires });
 const sauvegarde = createRoute({ getParentRoute: () => application, path: "/sauvegarde", component: surOrdinateur(Sauvegarde, "Sauvegarde"), beforeLoad: reserveAdmin });
 const comptes = createRoute({ getParentRoute: () => application, path: "/comptes", component: surOrdinateur(Comptes, "Comptes"), beforeLoad: reserveAdmin });
 const journal = createRoute({ getParentRoute: () => application, path: "/journal", component: surOrdinateur(Journal, "Journal"), beforeLoad: reserveAdmin });
 
 export const router = createRouter({
-  routeTree: racine.addChildren([connexionRoute, lienRoute, application.addChildren([accueil, maisons, sauvegarde, comptes, journal])]),
+  routeTree: racine.addChildren([connexionRoute, lienRoute, application.addChildren([accueil, maisons, elementsRoute, ficheElementRoute, prestataires, sauvegarde, comptes, journal])]),
   history: createBrowserHistory(),
 });
 

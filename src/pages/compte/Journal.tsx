@@ -10,6 +10,15 @@ const LIBELLES: Record<string, string> = {
   creerMaison: "Nouvelle maison",
   majMaison: "Maison modifiée",
   supprimerMaison: "Maison supprimée",
+  creerElement: "Nouvel élément",
+  majElement: "Élément modifié",
+  supprimerElement: "Élément supprimé",
+  creerPrestataire: "Nouveau prestataire",
+  majPrestataire: "Prestataire modifié",
+  supprimerPrestataire: "Prestataire supprimé",
+  creerDocument: "Document ajouté",
+  majDocument: "Document modifié",
+  supprimerDocument: "Document supprimé",
 };
 
 const PERIODES = [

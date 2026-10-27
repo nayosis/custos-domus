@@ -3,15 +3,18 @@
  * Ce sont les fonctions exportées de src/data/ (le navigateur en reçoit des talons, cf. vite.config.ts).
  * Tout compte connecté peut les appeler ; seules les écritures sont journalisées et diffusées.
  */
+import * as documents from "../src/data/documents";
+import * as elements from "../src/data/elements";
 import * as maisons from "../src/data/maisons";
+import * as prestataires from "../src/data/prestataires";
 
 /** Modules exposés (même liste que le plugin Vite qui génère les talons). */
-export const MODULES_RPC = { maisons };
+export const MODULES_RPC = { maisons, elements, prestataires, documents };
 
 export type Droit = "lecture" | "ecriture";
 
 /** Fonctions qui ne modifient rien. Toute autre fonction exposée est une écriture. */
-const LECTURE = new Set(["listeMaisons"]);
+const LECTURE = new Set(["listeMaisons", "listeElements", "ficheElement", "listePrestataires"]);
 
 type Fonction = (...args: unknown[]) => unknown;
 

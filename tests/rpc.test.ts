@@ -10,6 +10,8 @@ describe("RPC", () => {
     expect(FONCTIONS.get("listeMaisons")?.droit).toBe("lecture");
     expect(FONCTIONS.get("creerMaison")?.droit).toBe("ecriture");
     expect(FONCTIONS.get("supprimerMaison")?.droit).toBe("ecriture");
+    expect(FONCTIONS.get("ficheElement")?.droit).toBe("lecture");
+    expect(FONCTIONS.get("creerDocument")?.droit).toBe("ecriture");
   });
 
   test("écriture puis lecture ; écritures journalisées", async () => {

@@ -3,7 +3,7 @@ import {
   Alert, AppShell, Badge, Box, Burger, Button, Divider, Drawer, Group, Menu, Modal, NavLink, PasswordInput, Stack, Text, UnstyledButton, SegmentedControl, useMantineColorScheme,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconBrandGithub, IconChevronUp, IconDatabaseExport, IconDots, IconHistory, IconHome, IconKey, IconLayoutDashboard, IconLogout, IconUserCog } from "@tabler/icons-react";
+import { IconBrandGithub, IconChevronUp, IconDatabaseExport, IconDots, IconHistory, IconHome, IconKey, IconLayoutDashboard, IconLogout, IconPackage, IconTool, IconUserCog } from "@tabler/icons-react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { appelApi } from "../lib/rpc";
 import { deconnexion, estAdmin, LIBELLES_ROLES, utilisateur } from "../lib/session";
@@ -14,11 +14,14 @@ import { DEPOT_URL } from "../lib/versions";
 import { BadgeMiseAJour } from "./MiseAJour";
 import { Logo } from "./Logo";
 
-type Entree = { to: string; label: string; icone: typeof IconHome; actif: (p: string) => boolean };
+/** `court` : libellé de la barre du bas, sur téléphone. */
+type Entree = { to: string; label: string; court?: string; icone: typeof IconHome; actif: (p: string) => boolean };
 
 const ENTREES: Entree[] = [
-  { to: "/", label: "Tableau de bord", icone: IconLayoutDashboard, actif: (p) => p === "/" },
+  { to: "/", label: "Tableau de bord", court: "Accueil", icone: IconLayoutDashboard, actif: (p) => p === "/" },
   { to: "/maisons", label: "Maisons", icone: IconHome, actif: (p) => p.startsWith("/maisons") },
+  { to: "/elements", label: "Éléments", icone: IconPackage, actif: (p) => p.startsWith("/elements") },
+  { to: "/prestataires", label: "Prestataires", court: "Artisans", icone: IconTool, actif: (p) => p.startsWith("/prestataires") },
 ];
 
 const ENTREES_ADMIN: Entree[] = [
@@ -179,7 +182,7 @@ function BarreBas({ chemin, onPlus }: { chemin: string; onPlus: () => void }) {
           {bouton(
             <>
               <e.icone size={22} />
-              <Text size="xs">{e.label}</Text>
+              <Text size="xs">{e.court ?? e.label}</Text>
             </>,
             e.actif(chemin),
           )}
