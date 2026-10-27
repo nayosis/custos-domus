@@ -1,12 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { strToU8, unzipSync, zipSync } from "fflate";
-import { ouvrirBase } from "../serveur/base";
+import { fermerBase, ouvrirBase } from "../serveur/base";
 import { installerSuperAdmin, ouvrirComptes } from "../serveur/comptes";
 import { BASE_DONNEES, DOSSIER_DONNEES, DOSSIER_FICHIERS, DOSSIER_MIGRATIONS } from "../serveur/config";
 
 // Base sur disque (la restauration remplace des fichiers), dans le dossier temporaire des tests.
+// Elle repart de zéro : un autre fichier de tests a pu y restaurer une sauvegarde (l'ordre des fichiers varie).
+fermerBase();
+for (const f of [BASE_DONNEES, `${BASE_DONNEES}-wal`, `${BASE_DONNEES}-shm`]) rmSync(f, { force: true });
 mkdirSync(DOSSIER_FICHIERS, { recursive: true });
 ouvrirBase(BASE_DONNEES, DOSSIER_MIGRATIONS);
 ouvrirComptes(join(DOSSIER_DONNEES, "comptes.db"));
