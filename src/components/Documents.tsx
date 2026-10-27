@@ -17,7 +17,8 @@ const OPTIONS_TYPE = Object.entries(TYPES_DOCUMENT).map(([value, label]) => ({ v
 /** Les navigateurs (hors Safari) n'affichent pas le HEIC des iPhone : on propose de le télécharger. */
 const affichable = (d: Document) => d.mime === "application/pdf" || (d.mime.startsWith("image/") && d.mime !== "image/heic");
 
-function Apercu({ doc, onClose }: { doc: Document | null; onClose: () => void }) {
+/** Aperçu d'un document : image, PDF (sur ordinateur), sinon ouverture ou téléchargement. */
+export function Apercu({ doc, onClose }: { doc: Document | null; onClose: () => void }) {
   // Les navigateurs des téléphones n'affichent pas un PDF dans une page : on l'ouvre dans sa propre visionneuse.
   const { tactile } = useEcran();
   return (

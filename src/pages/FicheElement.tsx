@@ -1,13 +1,16 @@
 import { useState, type ReactNode } from "react";
 import { ActionIcon, Alert, Anchor, Badge, Breadcrumbs, Button, Card, Grid, Group, Menu, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { modals } from "@mantine/modals";
-import { IconArchive, IconDots, IconPencil, IconTrash } from "@tabler/icons-react";
+import { IconArchive, IconDots, IconPencil, IconReplace, IconTrash } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ficheElement, majElement, supprimerElement } from "../data/elements";
 import { BadgeGarantie } from "../components/BadgeGarantie";
 import { Documents } from "../components/Documents";
+import { Entretiens } from "../components/Entretiens";
+import { Historique } from "../components/Historique";
 import { ModalElement } from "../components/ModalElement";
+import { ModalRemplacement } from "../components/ModalRemplacement";
 import { dateLisible, euros } from "../lib/dates";
 import { ecrire } from "../lib/query";
 import { ficheElementRoute } from "../router";
@@ -30,6 +33,7 @@ export function FicheElement() {
   const naviguer = useNavigate();
   const { data, error } = useQuery({ queryKey: ["element", id], queryFn: () => ficheElement(id) });
   const [edition, setEdition] = useState(false);
+  const [remplacement, setRemplacement] = useState(false);
 
   if (error)
     return (
@@ -40,7 +44,7 @@ export function FicheElement() {
       </Stack>
     );
   if (!data) return null;
-  const { element: e, maison, documents, remplace, remplacant } = data;
+  const { element: e, maison, documents, entretiens, historique, remplace, remplacant } = data;
 
   const supprimer = () =>
     modals.openConfirmModal({
@@ -106,6 +110,11 @@ export function FicheElement() {
               <Menu.Item leftSection={<IconArchive size={14} />} onClick={() => ecrire(() => majElement(e.id, { archive: !e.archive }, e.modifieLe))}>
                 {e.archive ? "Désarchiver" : "Archiver (vendu, jeté…)"}
               </Menu.Item>
+              {!e.archive && (
+                <Menu.Item leftSection={<IconReplace size={14} />} onClick={() => setRemplacement(true)}>
+                  Remplacer par un nouveau…
+                </Menu.Item>
+              )}
               <Menu.Divider />
               <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={supprimer}>
                 Supprimer
@@ -126,7 +135,14 @@ export function FicheElement() {
       )}
 
       <Grid gap="lg">
-        <Grid.Col span={{ base: 12, md: 5 }}>
+        {/* Sur téléphone, les entretiens d'abord : c'est ce qu'on vient chercher. */}
+        <Grid.Col span={{ base: 12, md: 7 }} order={{ base: 1, md: 2 }}>
+          <Stack gap="lg">
+            <Entretiens elementId={e.id} categorie={e.categorie} entretiens={entretiens} archive={e.archive} />
+            <Historique elementId={e.id} historique={historique} />
+          </Stack>
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 5 }} order={{ base: 2, md: 1 }}>
           <Stack gap="lg">
             <Card withBorder>
               <Title order={4} mb="sm">
@@ -163,6 +179,7 @@ export function FicheElement() {
                 </Text>
               )}
             </Card>
+            <Documents documents={documents} elementId={e.id} />
             {e.notes && (
               <Card withBorder>
                 <Title order={4} mb="sm">
@@ -188,12 +205,15 @@ export function FicheElement() {
             )}
           </Stack>
         </Grid.Col>
-        <Grid.Col span={{ base: 12, md: 7 }}>
-          <Documents documents={documents} elementId={e.id} />
-        </Grid.Col>
       </Grid>
 
       <ModalElement element={e} opened={edition} onClose={() => setEdition(false)} />
+      <ModalRemplacement
+        element={e}
+        entretiensActifs={entretiens.filter((x) => x.actif).map((x) => x.titre)}
+        opened={remplacement}
+        onClose={() => setRemplacement(false)}
+      />
     </Stack>
   );
 }

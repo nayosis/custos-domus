@@ -50,7 +50,7 @@ Modèle d'entretien ── bibliothèque appliquée en un clic à un élément
 
 1. Socle (fait) : infrastructure reprise de Tabularium, comptes, sauvegarde, maisons, thème.
 2. Éléments, prestataires, documents (fait) : envoi, aperçu PDF et images, photo depuis le téléphone, type deviné.
-3. Entretiens et réalisations : flux tâche et rendez-vous, réparations, bibliothèque de modèles, historique, remplacement.
+3. Entretiens et réalisations (fait) : flux tâche et rendez-vous, réparations, bibliothèque de 21 modèles (migration 0001), historique avec pièces jointes, remplacement.
 4. Tableau de bord : retard, à planifier, rendez-vous, garanties, dernières interventions, coûts de l'année ; filtre maison.
 5. Rappels : tâche quotidienne, e-mail, push PWA, flux iCal.
 6. Sauvegarde automatique chaque nuit dans `/data/sauvegardes` (14 conservées).

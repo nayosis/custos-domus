@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { Autocomplete, Button, Chip, Divider, Group, Modal, NumberInput, Select, SimpleGrid, Stack, Text, TextInput, Textarea } from "@mantine/core";
-import { DateInput } from "@mantine/dates";
 import { useQuery } from "@tanstack/react-query";
 import { creerElement, majElement } from "../data/elements";
 import { listeMaisons } from "../data/maisons";
 import type { Element } from "../db/schema";
-import { lireDate } from "../lib/dates";
 import { CATEGORIES, DUREES_GARANTIE, plusAnnees } from "../lib/elements";
 import { ecrire } from "../lib/query";
+import { ChampDate } from "./Champs";
 
 type Saisie = {
   maisonId: string | null;
@@ -40,11 +39,6 @@ const depuis = (e: Element | null, maisonId: string | null): Saisie => ({
   finGarantie: e?.finGarantie ?? null,
   notes: e?.notes ?? "",
 });
-
-/** Champ date français, effaçable ; se saisit aussi au clavier (« 14/03/2025 »). */
-function ChampDate(props: { label: string; description?: string; value: string | null; onChange: (v: string | null) => void }) {
-  return <DateInput {...props} valueFormat="DD/MM/YYYY" placeholder="jj/mm/aaaa" dateParser={lireDate} clearable />;
-}
 
 /**
  * Création (élément absent) ou modification d'un élément.

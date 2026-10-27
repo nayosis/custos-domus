@@ -31,3 +31,11 @@ export function lireDate(saisie: string): string | null {
   if (d.getUTCFullYear() !== a || d.getUTCMonth() !== m - 1 || d.getUTCDate() !== j) return null;
   return d.toISOString().slice(0, 10);
 }
+
+/** Durée arrondie à l'unité parlante : « 12 jours », « 5 mois », « 3 ans ». */
+export function duree(jours: number) {
+  const j = Math.abs(jours);
+  if (j < 60) return `${j} jour${j > 1 ? "s" : ""}`;
+  if (j < 730) return `${Math.round(j / 30.44)} mois`;
+  return `${Math.round(j / 365.25)} ans`;
+}
