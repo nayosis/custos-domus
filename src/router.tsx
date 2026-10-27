@@ -6,6 +6,7 @@ import { Accueil } from "./pages/Accueil";
 import { Elements } from "./pages/Elements";
 import { FicheElement } from "./pages/FicheElement";
 import { Maisons } from "./pages/Maisons";
+import { Notifications } from "./pages/Notifications";
 import { Prestataires } from "./pages/Prestataires";
 import { Sauvegarde } from "./pages/Sauvegarde";
 import { Connexion } from "./pages/compte/Connexion";
@@ -63,12 +64,13 @@ export const elementsRoute = createRoute({
 });
 export const ficheElementRoute = createRoute({ getParentRoute: () => application, path: "/elements/$id", component: FicheElement });
 const prestataires = createRoute({ getParentRoute: () => application, path: "/prestataires", component: Prestataires });
+const notificationsRoute = createRoute({ getParentRoute: () => application, path: "/notifications", component: Notifications });
 const sauvegarde = createRoute({ getParentRoute: () => application, path: "/sauvegarde", component: surOrdinateur(Sauvegarde, "Sauvegarde"), beforeLoad: reserveAdmin });
 const comptes = createRoute({ getParentRoute: () => application, path: "/comptes", component: surOrdinateur(Comptes, "Comptes"), beforeLoad: reserveAdmin });
 const journal = createRoute({ getParentRoute: () => application, path: "/journal", component: surOrdinateur(Journal, "Journal"), beforeLoad: reserveAdmin });
 
 export const router = createRouter({
-  routeTree: racine.addChildren([connexionRoute, lienRoute, application.addChildren([accueilRoute, maisons, elementsRoute, ficheElementRoute, prestataires, sauvegarde, comptes, journal])]),
+  routeTree: racine.addChildren([connexionRoute, lienRoute, application.addChildren([accueilRoute, maisons, elementsRoute, ficheElementRoute, prestataires, notificationsRoute, sauvegarde, comptes, journal])]),
   history: createBrowserHistory(),
 });
 

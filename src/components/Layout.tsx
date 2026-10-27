@@ -3,7 +3,7 @@ import {
   Alert, AppShell, Badge, Box, Burger, Button, Divider, Drawer, Group, Menu, Modal, NavLink, PasswordInput, Stack, Text, UnstyledButton, SegmentedControl, useMantineColorScheme,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconBrandGithub, IconChevronUp, IconDatabaseExport, IconDots, IconHistory, IconHome, IconKey, IconLayoutDashboard, IconLogout, IconPackage, IconTool, IconUserCog } from "@tabler/icons-react";
+import { IconBell, IconBrandGithub, IconChevronUp, IconDatabaseExport, IconDots, IconHistory, IconHome, IconKey, IconLayoutDashboard, IconLogout, IconPackage, IconTool, IconUserCog } from "@tabler/icons-react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { appelApi } from "../lib/rpc";
 import { deconnexion, estAdmin, LIBELLES_ROLES, utilisateur } from "../lib/session";
@@ -24,6 +24,9 @@ const ENTREES: Entree[] = [
   { to: "/prestataires", label: "Prestataires", court: "Artisans", icone: IconTool, actif: (p) => p.startsWith("/prestataires") },
 ];
 
+/** Pour tous, dans le menu (pas dans la barre du bas du téléphone). */
+const ENTREES_COMPTE: Entree[] = [{ to: "/notifications", label: "Notifications", icone: IconBell, actif: (p) => p.startsWith("/notifications") }];
+
 const ENTREES_ADMIN: Entree[] = [
   { to: "/comptes", label: "Comptes", icone: IconUserCog, actif: (p) => p.startsWith("/comptes") },
   { to: "/journal", label: "Journal", icone: IconHistory, actif: (p) => p.startsWith("/journal") },
@@ -31,7 +34,7 @@ const ENTREES_ADMIN: Entree[] = [
 ];
 
 /** Liens du menu, dans l'ordre (les admins ont en plus Comptes, Journal, Sauvegarde). */
-const liens = (): Entree[] => (estAdmin() ? [...ENTREES, ...ENTREES_ADMIN] : ENTREES);
+const liens = (): Entree[] => (estAdmin() ? [...ENTREES, ...ENTREES_COMPTE, ...ENTREES_ADMIN] : [...ENTREES, ...ENTREES_COMPTE]);
 
 function ModalMotDePasse({ opened, onClose }: { opened: boolean; onClose: () => void }) {
   const [actuel, setActuel] = useState("");

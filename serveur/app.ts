@@ -11,6 +11,7 @@ import { baseCourante } from "./base";
 import { diffuser, fluxEvenements } from "./evenements";
 import { journaliser, lireJournal } from "./journal";
 import { etatMiseAJour } from "./miseAJour";
+import { routesRappels } from "./routesRappels";
 import { contexteRequete } from "./tracabilite";
 import { Conflit } from "../src/lib/conflit";
 
@@ -59,6 +60,9 @@ export function creerApp() {
 
       // --- Connexion, liens, comptes ; utilisateur de la session pour toutes les routes suivantes
       .use(routesAuth)
+
+      // --- Rappels : préférences, abonnements push, réglages d'envoi, flux d'agenda
+      .use(routesRappels)
 
       // --- Nouvelle version disponible ? (compte connecté)
       .get("/api/mise-a-jour", ({ utilisateur }) => {

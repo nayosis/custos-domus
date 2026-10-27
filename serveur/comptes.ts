@@ -52,9 +52,33 @@ export function ouvrirComptes(chemin: string) {
       expire_le INTEGER NOT NULL,
       utilise_le INTEGER
     );
+    -- Réglages de l'installation (envoi des e-mails, clés VAPID, dernière tournée des rappels).
+    CREATE TABLE IF NOT EXISTS reglage (
+      cle TEXT PRIMARY KEY,
+      valeur TEXT NOT NULL
+    );
+    -- Rappels : canaux choisis par chacun, et lien secret de son flux d'agenda.
+    CREATE TABLE IF NOT EXISTS preference (
+      utilisateur_id TEXT PRIMARY KEY REFERENCES utilisateur(id) ON DELETE CASCADE,
+      email INTEGER NOT NULL DEFAULT 1,
+      push INTEGER NOT NULL DEFAULT 1,
+      jeton_ical TEXT UNIQUE
+    );
+    -- Appareils abonnés aux notifications (un par navigateur ou téléphone).
+    CREATE TABLE IF NOT EXISTS abonnement_push (
+      endpoint TEXT PRIMARY KEY,
+      utilisateur_id TEXT NOT NULL REFERENCES utilisateur(id) ON DELETE CASCADE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      appareil TEXT,
+      cree_le TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    );
   `);
   return base;
 }
+
+/** La base des comptes, pour les modules voisins (réglages, préférences de rappel). */
+export const baseComptes = () => base;
 
 const hacherJeton = (jeton: string) => new Bun.CryptoHasher("sha256").update(jeton).digest("hex");
 const nouveauJeton = () => Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");

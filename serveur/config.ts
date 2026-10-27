@@ -21,6 +21,9 @@ export const VERSION: string = (await import("../package.json")).version;
 export const INSTALLATION: Installation = process.env.CUSTOS_INSTALLATION === "docker" ? "docker" : "source";
 
 /** Vérifier sur GitHub qu'une nouvelle version existe (désactivable : CUSTOS_VERIFIER_MISES_A_JOUR=non). */
+/** Fuseau des rappels (8 h) et des dates du jour. */
+export const FUSEAU = process.env.TZ || "Europe/Paris";
+
 export const VERIFIER_MISES_A_JOUR = !["non", "no", "false", "0"].includes((process.env.CUSTOS_VERIFIER_MISES_A_JOUR ?? "").toLowerCase());
 
 export function preparerDossiers() {

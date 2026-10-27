@@ -29,13 +29,17 @@
     "drizzle-orm": "^0.45.3",
     "elysia": "^1.4.30",
     "fflate": "^0.8.3",
+    "nodemailer": "7.0.9",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "web-push": "3.6.7"
   },
   "devDependencies": {
     "@types/bun": "^1.4.2",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "@types/web-push": "^3.6.4",
     "@vitejs/plugin-react": "^6.0.2",
     "drizzle-kit": "^0.31.11",
     "postcss": "^8.5.28",

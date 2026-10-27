@@ -52,7 +52,7 @@ Modèle d'entretien ── bibliothèque appliquée en un clic à un élément
 2. Éléments, prestataires, documents (fait) : envoi, aperçu PDF et images, photo depuis le téléphone, type deviné.
 3. Entretiens et réalisations (fait) : flux tâche et rendez-vous, réparations, bibliothèque de 21 modèles (migration 0001), historique avec pièces jointes, remplacement.
 4. Tableau de bord (fait) : retard, à prévoir, rendez-vous, prochainement (3 mois), garanties, dernières interventions, dépenses de l'année ; filtre maison.
-5. Rappels : tâche quotidienne, e-mail, push PWA, flux iCal.
+5. Rappels (fait) : tournée quotidienne à 8 h (jours manqués rattrapés, une semaine au plus), e-mail (Mailjet ou SMTP, réglé par un admin), push PWA (service worker `public/sw.js`, clés VAPID créées au premier besoin), flux iCal par lien secret. Réglages et préférences dans comptes.db.
 6. Sauvegarde automatique chaque nuit dans `/data/sauvegardes` (14 conservées).
 7. Publication : dépôt `nayosis/custos-domus`, image ghcr.io, déploiement sur Pikachu.
 

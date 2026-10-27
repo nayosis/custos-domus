@@ -5,11 +5,27 @@ export function dateLisible(d: string | null | undefined, options: Intl.DateTime
   return new Date(a, m - 1, j).toLocaleDateString("fr-FR", options);
 }
 
-/** Date du jour au format « AAAA-MM-JJ » (heure locale). */
-export function aujourdhui() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/**
+ * Fuseau des dates « du jour ». Le navigateur garde le sien ; le serveur fixe celui de l'installation
+ * (TZ, Europe/Paris par défaut) : les données de fuseaux d'Intl ne dépendent pas de l'image système.
+ */
+let fuseau: string | undefined;
+export const definirFuseau = (f: string) => {
+  fuseau = f;
+};
+
+/** Date et heure locales (dans le fuseau ci-dessus). */
+export function maintenantLocal(d = new Date()) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", { timeZone: fuseau, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" })
+      .formatToParts(d)
+      .map((x) => [x.type, x.value]),
+  );
+  return { jour: `${p.year}-${p.month}-${p.day}`, heure: Number(p.hour), jourSemaine: new Date(`${p.year}-${p.month}-${p.day}T12:00:00Z`).getUTCDay() };
 }
+
+/** Date du jour au format « AAAA-MM-JJ ». */
+export const aujourdhui = () => maintenantLocal().jour;
 
 /** Montant en euros : « 1 250 € ». */
 export const euros = (n: number | null | undefined) =>
