@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Custos Domus — le gardien de la maison : logiciel libre de suivi de l'entretien de ses maisons." />
+    <meta name="theme-color" content="#d4603a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Custos Domus" />
+    <link rel="icon" type="image/svg+xml" href="/icone.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Custos Domus</title>
+    <script>
+      try {
+        var t = localStorage.getItem("mantine-color-scheme-value") || "auto";
+        if (t === "auto") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.setAttribute("data-mantine-color-scheme", t);
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

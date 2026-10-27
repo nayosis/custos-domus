@@ -1,0 +1,60 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+.ligne-cliquable {
+  cursor: pointer;
+}
+
+/* Téléphone : toutes les fenêtres (modales) en plein écran. */
+@media (max-width: 767.98px) {
+  .mantine-Modal-inner {
+    padding: 0 !important;
+  }
+  .mantine-Modal-content {
+    flex: 1 0 100% !important;
+    max-width: 100% !important;
+    min-height: 100dvh;
+    border-radius: 0 !important;
+  }
+}
+
+/* Tuiles cliquables (tableau de bord, maisons) */
+.tuile {
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.tuile:hover {
+  border-color: var(--mantine-color-brique-4);
+  box-shadow: var(--mantine-shadow-xs);
+}
+
+/*
+ * Fonds chaleureux : crème pour la page, sable pour le menu, cartes un ton plus clair.
+ * Couleurs qui suivent le thème (clair / sombre) : à utiliser plutôt que des valeurs fixes.
+ */
+:root[data-mantine-color-scheme="light"] {
+  --mantine-color-body: #fbf7f2;
+  --mantine-color-default-border: #e8ddd1;
+  --t-fond-doux: #f5ede4;
+  --t-fond-menu: #f3eadf;
+  --t-surface: #fffdfa;
+  --t-fond-accent: var(--mantine-color-brique-0);
+  --t-fond-alerte: var(--mantine-color-orange-0);
+}
+:root[data-mantine-color-scheme="dark"] {
+  --t-fond-doux: var(--mantine-color-dark-6);
+  --t-fond-menu: var(--mantine-color-dark-8);
+  --t-surface: var(--mantine-color-dark-7);
+  --t-fond-accent: rgba(212, 96, 58, 0.16);
+  --t-fond-alerte: rgba(247, 103, 7, 0.16);
+}
+
+/* Cartes et papiers : un ton au-dessus du fond de page. */
+.mantine-Paper-root,
+.mantine-Card-root {
+  background-color: var(--t-surface);
+}

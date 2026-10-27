@@ -1,0 +1,12 @@
+{
+  "name": "Custos Domus",
+  "short_name": "Custos Domus",
+  "description": "Le gardien de la maison : entretiens, réparations, factures et garanties",
+  "lang": "fr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fbf7f2",
+  "theme_color": "#d4603a",
+  "icons": [{ "src": "/icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

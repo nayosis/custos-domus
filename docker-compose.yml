@@ -1,0 +1,24 @@
+# Custos Domus sur un serveur. Démarrage : docker compose up -d   — puis ouvrir http://<serveur>:3000
+# Réglages facultatifs dans un fichier .env à côté de ce fichier (voir .env.exemple).
+services:
+  custos-domus:
+    image: ghcr.io/nayosis/custos-domus:${CUSTOS_VERSION:-latest}
+    # Pour construire l'image soi-même à partir des sources : décommenter la ligne suivante.
+    # build: .
+    container_name: custos-domus
+    restart: unless-stopped
+    environment:
+      # Facultatif : sans ces deux variables, le compte administrateur se crée à l'écran au premier lancement.
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-}
+      SUPER_ADMIN_MOT_DE_PASSE: ${SUPER_ADMIN_MOT_DE_PASSE:-}
+      # Facultatif : « non » pour ne pas vérifier sur GitHub qu'une nouvelle version existe.
+      CUSTOS_VERIFIER_MISES_A_JOUR: ${CUSTOS_VERIFIER_MISES_A_JOUR:-}
+      # Fuseau horaire : sert aux échéances et à l'heure d'envoi des rappels.
+      TZ: ${TZ:-Europe/Paris}
+    volumes:
+      # Base, comptes, factures et photos : à sauvegarder avec le reste du serveur.
+      - ./data:/data
+    ports:
+      # Le reverse proxy (HTTPS) joint Custos Domus sur ce port. S'il tourne sur cette même machine,
+      # on peut restreindre à "127.0.0.1:${CUSTOS_PORT:-3000}:3000".
+      - "${CUSTOS_PORT:-3000}:3000"

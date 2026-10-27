@@ -1,0 +1,10 @@
+node_modules
+dist
+data
+.git
+.env
+*.tar.gz
+
+deploiement-perso*
+.github
+docs
