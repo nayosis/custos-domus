@@ -6,6 +6,7 @@ import type { Rattachement } from "../data/entretiens";
 import { supprimerRealisation } from "../data/realisations";
 import type { Document, Realisation } from "../db/schema";
 import { dateLisible, euros } from "../lib/dates";
+import { km } from "../lib/vehicules";
 import { ecrire } from "../lib/query";
 import { Apercu } from "./Documents";
 import { ModalRealisation, type Cible } from "./ModalRealisation";
@@ -16,7 +17,7 @@ export type LigneHistorique = Realisation & { prestataireNom: string | null; doc
  * Ce qui a été fait sur l'élément (ou la maison), du plus récent au plus ancien : choses à faire réalisées et
  * interventions, et en gris les échéances passées volontairement (avec leur motif).
  */
-export function Historique({ ou, historique }: { ou: Rattachement; historique: LigneHistorique[] }) {
+export function Historique({ ou, historique, vehicule = false }: { ou: Rattachement; historique: LigneHistorique[]; vehicule?: boolean }) {
   // On garde l'identifiant : la ligne affichée dans la fenêtre suit les données (pièces jointes retirées…).
   const [edition, setEdition] = useState<string | "intervention" | null>(null);
   const [apercu, setApercu] = useState<Document | null>(null);
@@ -108,7 +109,7 @@ export function Historique({ ou, historique }: { ou: Rattachement; historique: L
               }
             >
               <Text size="xs" c="dimmed">
-                {[dateLisible(r.date), r.prestataireNom, r.cout != null && euros(r.cout)].filter(Boolean).join(" · ")}
+                {[dateLisible(r.date), km(r.kilometrage), r.prestataireNom, r.cout != null && euros(r.cout)].filter(Boolean).join(" · ")}
               </Text>
               {r.note && (
                 <Text size="sm" mt={4} c={r.passee ? "dimmed" : undefined} style={{ whiteSpace: "pre-line" }}>
@@ -132,7 +133,7 @@ export function Historique({ ou, historique }: { ou: Rattachement; historique: L
         </Timeline>
       )}
 
-      <ModalRealisation ou={ou} cible={cible} onClose={() => setEdition(null)} />
+      <ModalRealisation ou={ou} cible={cible} vehicule={vehicule} onClose={() => setEdition(null)} />
       <Apercu doc={apercu} onClose={() => setApercu(null)} />
     </Card>
   );

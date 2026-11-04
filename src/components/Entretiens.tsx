@@ -20,6 +20,7 @@ import {
   type Situation, type Unite,
 } from "../lib/entretiens";
 import { ecrire } from "../lib/query";
+import { km, libelleKm } from "../lib/vehicules";
 import { ChampDate, ChampPrestataire } from "./Champs";
 import { ModalRealisation } from "./ModalRealisation";
 
@@ -88,6 +89,10 @@ type Saisie = {
   delaiModifie: boolean;
   prestataireId: string | null;
   notes: string;
+  /** Véhicule : « ou tous les N km », kilométrage visé (modification), kilométrage la dernière fois (création). */
+  intervalleKm: number | string;
+  kmEcheance: number | string;
+  kmDerniere: number | string;
 };
 
 const VIDE: Saisie = {
@@ -103,12 +108,15 @@ const VIDE: Saisie = {
   delaiModifie: false,
   prestataireId: null,
   notes: "",
+  intervalleKm: "",
+  kmEcheance: "",
+  kmDerniere: "",
 };
 
 const depuis = (e: Entretien): Saisie => ({
   titre: e.titre,
   nature: e.nature as Nature,
-  periodique: estRecurrent(e),
+  periodique: estRecurrent(e) || !!e.intervalleKm,
   intervalleValeur: e.intervalleValeur ?? 1,
   intervalleUnite: (e.intervalleUnite as Unite) ?? "an",
   ancrage: e.ancrage === "fixe" ? "fixe" : "realisation",
@@ -118,10 +126,15 @@ const depuis = (e: Entretien): Saisie => ({
   delaiModifie: true,
   prestataireId: e.prestataireId,
   notes: e.notes ?? "",
+  intervalleKm: e.intervalleKm ?? "",
+  kmEcheance: e.kmEcheance ?? "",
+  kmDerniere: "",
 });
 
 /** Création (entretien absent), éventuellement depuis un modèle de la bibliothèque, ou modification. */
-function ModalEntretien({ ou, categorie, entretien, opened, onClose }: { ou: Rattachement; categorie: string | null; entretien: Entretien | null; opened: boolean; onClose: () => void }) {
+function ModalEntretien({
+  ou, categorie, vehicule, entretien, opened, onClose,
+}: { ou: Rattachement; categorie: string | null; vehicule: boolean; entretien: Entretien | null; opened: boolean; onClose: () => void }) {
   const { data: modeles = [] } = useQuery({ queryKey: ["modeles"], queryFn: () => listeModeles(), enabled: opened && !entretien });
   const [v, setV] = useState<Saisie>(VIDE);
   const [modele, setModele] = useState<ModeleEntretien | null>(null);
@@ -141,10 +154,11 @@ function ModalEntretien({ ou, categorie, entretien, opened, onClose }: { ou: Rat
     const tries = [...modeles].sort((a, b) => Number(b.categorie === categorie) - Number(a.categorie === categorie));
     for (const m of tries) {
       const g = m.categorie ?? "Divers";
-      groupes.set(g, [...(groupes.get(g) ?? []), { value: m.id, label: `${m.titre} — ${libelleIntervalle(m)}` }]);
+      const rythme = [estRecurrent(m) && libelleIntervalle(m), vehicule && m.intervalleKm && libelleKm(m.intervalleKm)].filter(Boolean).join(" ou ") || "une fois";
+      groupes.set(g, [...(groupes.get(g) ?? []), { value: m.id, label: `${m.titre} — ${rythme}` }]);
     }
     return [...groupes].map(([group, items]) => ({ group, items }));
-  }, [modeles, categorie]);
+  }, [modeles, categorie, vehicule]);
   const appliquer = (id: string | null) => {
     const m = modeles.find((x) => x.id === id) ?? null;
     setModele(m);
@@ -155,6 +169,7 @@ function ModalEntretien({ ou, categorie, entretien, opened, onClose }: { ou: Rat
       periodique: estRecurrent(m),
       intervalleValeur: m.intervalleValeur ?? 1,
       intervalleUnite: (m.intervalleUnite as Unite) ?? "an",
+      intervalleKm: vehicule ? (m.intervalleKm ?? "") : "",
       delai: m.delaiAlerteJours,
       ...(m.nature === "routine" ? { ancrage: "fixe" as const } : {}),
       delaiModifie: false,
@@ -166,14 +181,17 @@ function ModalEntretien({ ou, categorie, entretien, opened, onClose }: { ou: Rat
   const echeancePrevue = v.echeance ?? (v.periodique && v.derniere && valeur ? ajouter(v.derniere, valeur, v.intervalleUnite) : aujourdhui());
   const delai = typeof v.delai === "number" ? v.delai : 0;
   const routine = v.nature === "routine";
-  const valide = v.titre.trim() && (!v.periodique || valeur >= 1) && typeof v.delai === "number" && (!entretien || v.echeance);
+  const intervalleKm = vehicule && v.periodique && typeof v.intervalleKm === "number" && v.intervalleKm >= 100 ? v.intervalleKm : null;
+  // Au kilométrage, l'intervalle de temps devient facultatif (« tous les 40 000 km »).
+  const valide = v.titre.trim() && (!v.periodique || valeur >= 1 || intervalleKm) && typeof v.delai === "number" && (!entretien || v.echeance);
 
   const enregistrer = async () => {
     const valeurs = {
       titre: v.titre,
       nature: v.nature,
-      intervalleValeur: v.periodique ? valeur : null,
-      intervalleUnite: v.periodique ? v.intervalleUnite : null,
+      intervalleValeur: v.periodique && valeur ? valeur : null,
+      intervalleUnite: v.periodique && valeur ? v.intervalleUnite : null,
+      intervalleKm,
       ancrage: v.ancrage,
       delaiAlerteJours: delai,
       prestataireId: routine ? null : v.prestataireId,
@@ -181,8 +199,18 @@ function ModalEntretien({ ou, categorie, entretien, opened, onClose }: { ou: Rat
     };
     const res = await ecrire<unknown>(() =>
       entretien
-        ? majEntretien(entretien.id, { ...valeurs, echeance: v.echeance! }, entretien.modifieLe)
-        : creerEntretien({ ...valeurs, ...ou, echeance: v.echeance ?? undefined, derniereRealisation: v.periodique ? v.derniere : null }),
+        ? majEntretien(
+            entretien.id,
+            { ...valeurs, echeance: v.echeance!, ...(intervalleKm && typeof v.kmEcheance === "number" ? { kmEcheance: v.kmEcheance } : {}) },
+            entretien.modifieLe,
+          )
+        : creerEntretien({
+            ...valeurs,
+            ...ou,
+            echeance: v.echeance ?? undefined,
+            derniereRealisation: v.periodique ? v.derniere : null,
+            kmDerniere: intervalleKm && typeof v.kmDerniere === "number" ? v.kmDerniere : null,
+          }),
     );
     if (res !== undefined) onClose();
   };
@@ -268,6 +296,44 @@ function ModalEntretien({ ou, categorie, entretien, opened, onClose }: { ou: Rat
                 allowDeselect={false}
               />
             </Group>
+            {vehicule && (
+              <SimpleGrid cols={{ base: 1, sm: 2 }}>
+                <NumberInput
+                  label="Ou tous les"
+                  description="Au premier atteint des deux"
+                  suffix=" km"
+                  thousandSeparator=" "
+                  min={0}
+                  step={1000}
+                  allowDecimal={false}
+                  value={v.intervalleKm}
+                  onChange={(x) => maj({ intervalleKm: x })}
+                />
+                {intervalleKm &&
+                  (entretien ? (
+                    <NumberInput
+                      label="Prochaine fois à"
+                      suffix=" km"
+                      thousandSeparator=" "
+                      min={0}
+                      allowDecimal={false}
+                      value={v.kmEcheance}
+                      onChange={(x) => maj({ kmEcheance: x })}
+                    />
+                  ) : (
+                    <NumberInput
+                      label="Kilométrage la dernière fois"
+                      description="Sinon : le compteur actuel"
+                      suffix=" km"
+                      thousandSeparator=" "
+                      min={0}
+                      allowDecimal={false}
+                      value={v.kmDerniere}
+                      onChange={(x) => maj({ kmDerniere: x })}
+                    />
+                  ))}
+              </SimpleGrid>
+            )}
             <Radio.Group label="Échéance suivante" value={v.ancrage} onChange={(a) => maj({ ancrage: a as Saisie["ancrage"] })}>
               <Stack gap={6} mt={4}>
                 <Radio value="realisation" label="Comptée depuis le jour où c'est fait" />
@@ -281,7 +347,7 @@ function ModalEntretien({ ou, categorie, entretien, opened, onClose }: { ou: Rat
             <ChampDate label="Dernière fois" description="Si vous le savez : l'échéance en découle" value={v.derniere} onChange={(d) => maj({ derniere: d })} />
           )}
           <ChampDate
-            label={v.periodique ? "Prochaine échéance" : "À faire pour le"}
+            label={intervalleKm ? "Prochaine échéance (au temps)" : v.periodique ? "Prochaine échéance" : "À faire pour le"}
             description={entretien ? undefined : `Sinon : ${dateLisible(echeancePrevue)}`}
             required={!!entretien}
             value={v.echeance}
@@ -430,7 +496,10 @@ function Ligne({
       onConfirm: () => ecrire(() => supprimerEntretien(e.id)),
     });
   const details = [
-    e.actif && estRecurrent(e) ? libelleIntervalle(e) : null,
+    e.actif && (estRecurrent(e) || e.intervalleKm)
+      ? [estRecurrent(e) && libelleIntervalle(e), e.intervalleKm && libelleKm(e.intervalleKm)].filter(Boolean).join(" ou ")
+      : null,
+    e.actif && e.kmEcheance != null ? `à ${km(e.kmEcheance)}` : null,
     e.actif ? `échéance ${dateLisible(e.echeance)}${e.echeanceInitiale ? ` (reportée, prévue le ${dateLisible(e.echeanceInitiale)})` : ""}` : null,
     e.prestataireNom,
   ].filter(Boolean);
@@ -520,7 +589,9 @@ function Ligne({
 }
 
 /** Choses à faire d'un élément ou d'une maison : en cours, et celles qui sont terminées ou suspendues (repliées). */
-export function Entretiens({ ou, categorie, entretiens, archive }: { ou: Rattachement; categorie: string | null; entretiens: LigneEntretien[]; archive: boolean }) {
+export function Entretiens({
+  ou, categorie, entretiens, archive, vehicule = false,
+}: { ou: Rattachement; categorie: string | null; entretiens: LigneEntretien[]; archive: boolean; vehicule?: boolean }) {
   const [edition, setEdition] = useState<{ entretien: Entretien | null } | null>(null);
   const [rdv, setRdv] = useState<LigneEntretien | null>(null);
   const [fait, setFait] = useState<LigneEntretien | null>(null);
@@ -559,6 +630,8 @@ export function Entretiens({ ou, categorie, entretiens, archive }: { ou: Rattach
             ? "Archivé : plus rien de suivi."
             : ou.maisonId
               ? "Sortir les poubelles, tondre, arroser… Ce qui se fait sur la maison elle-même, sans équipement particulier."
+              : vehicule
+                ? "Contrôle technique, révision au kilométrage, courroie de distribution… Partez d'un modèle ou décrivez le vôtre."
               : "Vidange tous les 4 ans, entretien annuel, nettoyage d'un filtre… Partez d'un modèle ou décrivez le vôtre."}
         </Text>
       )}
@@ -577,10 +650,10 @@ export function Entretiens({ ou, categorie, entretiens, archive }: { ou: Rattach
         </>
       )}
 
-      <ModalEntretien ou={ou} categorie={categorie} entretien={edition?.entretien ?? null} opened={!!edition} onClose={() => setEdition(null)} />
+      <ModalEntretien ou={ou} categorie={categorie} vehicule={vehicule} entretien={edition?.entretien ?? null} opened={!!edition} onClose={() => setEdition(null)} />
       <ModalRdv entretien={rdv} onClose={() => setRdv(null)} />
       <ModalEcheance cible={echeance} onClose={() => setEcheance(null)} />
-      <ModalRealisation cible={fait ? { mode: "entretien", entretien: fait } : null} onClose={() => setFait(null)} />
+      <ModalRealisation cible={fait ? { mode: "entretien", entretien: fait } : null} vehicule={vehicule} onClose={() => setFait(null)} />
     </Card>
   );
 }

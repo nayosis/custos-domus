@@ -5,6 +5,7 @@
  */
 import * as documents from "../src/data/documents";
 import * as elements from "../src/data/elements";
+import * as vehicules from "../src/data/vehicules";
 import * as entretiens from "../src/data/entretiens";
 import * as maisons from "../src/data/maisons";
 import * as tableauDeBord from "../src/data/tableauDeBord";
@@ -12,12 +13,12 @@ import * as prestataires from "../src/data/prestataires";
 import * as realisations from "../src/data/realisations";
 
 /** Modules exposés (même liste que le plugin Vite qui génère les talons). */
-export const MODULES_RPC = { tableauDeBord, maisons, elements, entretiens, realisations, prestataires, documents };
+export const MODULES_RPC = { tableauDeBord, maisons, elements, vehicules, entretiens, realisations, prestataires, documents };
 
 export type Droit = "lecture" | "ecriture";
 
 /** Fonctions qui ne modifient rien. Toute autre fonction exposée est une écriture. */
-const LECTURE = new Set(["listeMaisons", "aFaireMaison", "listeElements", "ficheElement", "listePrestataires", "listeModeles", "tableauDeBord"]);
+const LECTURE = new Set(["listeMaisons", "aFaireMaison", "listeElements", "ficheElement", "listeVehicules", "historiqueReleves", "listePrestataires", "listeModeles", "tableauDeBord"]);
 
 type Fonction = (...args: unknown[]) => unknown;
 

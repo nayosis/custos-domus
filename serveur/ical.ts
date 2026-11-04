@@ -60,7 +60,7 @@ export async function genererIcal(maintenant = new Date(), { famille = false } =
   const { entretiens, garanties } = await chargerSuivi();
   const evenements: Evenement[] = [];
   for (const e of entretiens) {
-    const ou = e.elementNom ? `${e.elementNom} (${e.maisonNom})` : e.maisonNom;
+    const ou = e.elementNom && e.maisonNom ? `${e.elementNom} (${e.maisonNom})` : (e.elementNom ?? e.maisonNom ?? "");
     const quoi = (debut: string) => `${debut} : ${e.titre}${e.elementNom ? ` – ${e.elementNom}` : ""}`;
     const contact = e.prestataireNom ? `\nPrestataire : ${e.prestataireNom}${e.prestataireTelephone ? `, ${e.prestataireTelephone}` : ""}` : "";
     if (e.etat === "rdv_pris" && e.dateRdv) {
@@ -91,7 +91,7 @@ export async function genererIcal(maintenant = new Date(), { famille = false } =
   // Garanties : celles qui courent encore, et celles expirées depuis moins d'un an.
   const ilYAUnAn = ajouter(maintenant.toISOString().slice(0, 10), -1, "an");
   for (const g of garanties.filter((x) => x.finGarantie >= ilYAUnAn))
-    evenements.push({ uid: `garantie-${g.id}`, jour: g.finGarantie, resume: `Fin de garantie : ${g.nom}`, description: g.maisonNom });
+    evenements.push({ uid: `garantie-${g.id}`, jour: g.finGarantie, resume: `Fin de garantie : ${g.nom}`, description: g.maisonNom ?? undefined });
 
   const horodatage = instantIcal(maintenant);
   const lignes = [

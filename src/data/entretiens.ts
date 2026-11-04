@@ -1,13 +1,17 @@
 import { asc, eq } from "drizzle-orm";
 import { db, newId } from "../db/client";
-import { entretien, modeleEntretien, realisation, type Entretien } from "../db/schema";
+import { element, entretien, modeleEntretien, realisation, type Entretien } from "../db/schema";
 import { aujourdhui, lireDate } from "../lib/dates";
 import { ajouter, DELAI_DEFAUT, echeanceApresPassage, estNature, estRecurrent, estUnite, lireHeure, prochaineEcheance, type Nature, type Unite } from "../lib/entretiens";
 import { ErreurMetier } from "../../serveur/erreurs";
+import { ajouterReleve, dernierKm, recalculerKm } from "../../serveur/kilometrage";
 import { verifierVersion, versionDe } from "./version";
 
 type Saisie = Partial<
-  Pick<Entretien, "titre" | "nature" | "intervalleValeur" | "intervalleUnite" | "ancrage" | "echeance" | "delaiAlerteJours" | "prestataireId" | "notes" | "actif">
+  Pick<
+    Entretien,
+    "titre" | "nature" | "intervalleValeur" | "intervalleUnite" | "ancrage" | "echeance" | "delaiAlerteJours" | "prestataireId" | "notes" | "actif" | "intervalleKm" | "kmEcheance"
+  >
 >;
 
 const date = (d: unknown, champ: string) => {
@@ -42,6 +46,12 @@ function nettoyer(v: Saisie) {
   }
   if (v.prestataireId !== undefined) r.prestataireId = v.prestataireId || null;
   if (v.notes !== undefined) r.notes = v.notes?.trim() || null;
+  for (const k of ["intervalleKm", "kmEcheance"] as const)
+    if (v[k] !== undefined) {
+      const n = v[k];
+      if (n != null && (!Number.isInteger(n) || n < 0 || n > 5_000_000 || (k === "intervalleKm" && n < 100))) throw new ErreurMetier("Kilométrage invalide.");
+      r[k] = n ?? null;
+    }
   if (v.actif !== undefined) r.actif = !!v.actif;
   return r;
 }
@@ -61,17 +71,29 @@ export function rattachement(v: { elementId?: string | null; maisonId?: string |
  * (la réalisation est alors consignée dans l'historique), sinon aujourd'hui.
  * Une routine n'a pas de prestataire.
  */
-export async function creerEntretien(v: Saisie & Rattachement & { titre: string; derniereRealisation?: string | null }) {
+const estVehicule = async (elementId: string | null) =>
+  !!elementId && (await db.select({ type: element.type }).from(element).where(eq(element.id, elementId)))[0]?.type === "vehicule";
+
+export async function creerEntretien(
+  v: Saisie & Rattachement & { titre: string; derniereRealisation?: string | null; /** Véhicule : kilométrage la dernière fois. */ kmDerniere?: number | null },
+) {
   const ou = rattachement(v);
   const valeurs = nettoyer({ nature: "tache", ...v });
   const nature = valeurs.nature as Nature;
   if (nature === "routine") valeurs.prestataireId = null;
+  const auKm = !!valeurs.intervalleKm;
+  if (auKm && !(await estVehicule(ou.elementId))) throw new ErreurMetier("Un intervalle en kilomètres ne vaut que pour un véhicule.");
+  if (v.kmDerniere != null && (!Number.isInteger(v.kmDerniere) || v.kmDerniere < 0)) throw new ErreurMetier("Kilométrage invalide.");
   const derniere = v.derniereRealisation ? date(v.derniereRealisation, "Dernière réalisation") : null;
   let echeance = valeurs.echeance;
   if (!echeance && derniere && estRecurrent(valeurs)) echeance = ajouter(derniere, valeurs.intervalleValeur!, valeurs.intervalleUnite as Unite);
   const id = newId();
+  const kmEcheance = auKm ? (valeurs.kmEcheance ?? (v.kmDerniere ?? (await dernierKm(ou.elementId!)) ?? 0) + valeurs.intervalleKm!) : null;
   await db.insert(entretien).values({
     ...valeurs,
+    kmEcheance,
+    // Au premier atteint : l'échéance au temps est gardée à part, l'échéance réelle est recalculée ci-dessous.
+    echeanceTemps: auKm && (estRecurrent(valeurs) || valeurs.echeance) ? (echeance ?? aujourdhui()) : null,
     id,
     ...ou,
     titre: valeurs.titre!,
@@ -82,7 +104,11 @@ export async function creerEntretien(v: Saisie & Rattachement & { titre: string;
     actif: true,
   });
   if (derniere)
-    await db.insert(realisation).values({ id: newId(), ...ou, entretienId: id, date: derniere, titre: valeurs.titre!, prestataireId: valeurs.prestataireId ?? null });
+    await db
+      .insert(realisation)
+      .values({ id: newId(), ...ou, entretienId: id, date: derniere, titre: valeurs.titre!, prestataireId: valeurs.prestataireId ?? null, kilometrage: v.kmDerniere ?? null });
+  if (derniere && v.kmDerniere != null) await ajouterReleve(ou.elementId!, derniere, v.kmDerniere);
+  if (auKm) await recalculerKm(ou.elementId!);
   return id;
 }
 
@@ -95,6 +121,19 @@ export async function majEntretien(id: string, patch: Saisie, version?: string |
     .update(entretien)
     .set({ ...valeurs, ...(avant && avant.echeance !== valeurs.echeance ? { echeanceInitiale: null } : {}) })
     .where(eq(entretien.id, id));
+  // Véhicule au kilométrage : l'échéance saisie est celle au temps ; l'échéance réelle est recalculée.
+  const e = await charger(id);
+  if (e.intervalleKm) {
+    if (!(await estVehicule(e.elementId))) throw new ErreurMetier("Un intervalle en kilomètres ne vaut que pour un véhicule.");
+    await db
+      .update(entretien)
+      .set({
+        ...(valeurs.echeance ? { echeanceTemps: estRecurrent(e) || !e.echeanceTemps ? valeurs.echeance : e.echeanceTemps } : {}),
+        ...(e.kmEcheance == null ? { kmEcheance: ((await dernierKm(e.elementId!)) ?? 0) + e.intervalleKm } : {}),
+      })
+      .where(eq(entretien.id, id));
+    await recalculerKm(e.elementId!);
+  } else if (e.kmEcheance != null || e.echeanceTemps != null) await db.update(entretien).set({ kmEcheance: null, echeanceTemps: null }).where(eq(entretien.id, id));
   return versionDe("entretien", id);
 }
 
@@ -149,6 +188,17 @@ export async function passerEcheance(id: string, v: { motif?: string | null } = 
   await db
     .insert(realisation)
     .values({ id: newId(), elementId: e.elementId, maisonId: e.maisonId, entretienId: id, date: occurrence, titre: e.titre, note: v.motif?.trim() || null, passee: true });
+  if (e.intervalleKm) {
+    // Au kilométrage : la fois suivante, un intervalle plus loin, au compteur comme au calendrier.
+    const temps = estRecurrent(e) ? echeanceApresPassage({ ...e, echeance: e.echeanceTemps ?? e.echeance }, aujourdhui()) : null;
+    const kmEcheance = (e.kmEcheance ?? (await dernierKm(e.elementId!)) ?? 0) + e.intervalleKm;
+    await db
+      .update(entretien)
+      .set({ ...SANS_RDV, echeanceInitiale: null, echeanceTemps: temps, kmEcheance, echeance: temps ?? e.echeance })
+      .where(eq(entretien.id, id));
+    await recalculerKm(e.elementId!);
+    return (await charger(id)).echeance;
+  }
   const suivante = echeanceApresPassage(e, aujourdhui());
   await db
     .update(entretien)
@@ -173,9 +223,17 @@ export async function reporterEcheance(id: string, v: { date: string }) {
  * Date du jour par défaut (routine : « Fait » en un geste ; ni coût ni prestataire).
  * Renvoie l'identifiant de la réalisation (pour y joindre des documents).
  */
-export async function realiserEntretien(id: string, v: { date?: string | null; note?: string | null; cout?: number | null; prestataireId?: string | null } = {}) {
+export async function realiserEntretien(
+  id: string,
+  v: { date?: string | null; note?: string | null; cout?: number | null; prestataireId?: string | null; /** Véhicule : compteur ce jour-là. */ km?: number | null } = {},
+) {
   const e = await charger(id);
   const jour = v.date ? date(v.date, "Date") : aujourdhui();
+  // Le kilométrage noté devient un relevé (vérifié : le compteur ne recule pas).
+  if (v.km != null) {
+    if (!e.elementId) throw new ErreurMetier("Kilométrage : seulement pour un véhicule.");
+    await ajouterReleve(e.elementId, jour, v.km);
+  }
   const routine = e.nature === "routine";
   if (!routine && v.cout != null && (!Number.isFinite(v.cout) || v.cout < 0)) throw new ErreurMetier("Coût invalide.");
   const prestataireId = routine ? null : v.prestataireId === undefined ? e.prestataireId : v.prestataireId || null;
@@ -190,7 +248,18 @@ export async function realiserEntretien(id: string, v: { date?: string | null; n
     note: v.note?.trim() || null,
     cout: routine ? null : (v.cout ?? null),
     prestataireId,
+    kilometrage: v.km ?? null,
   });
+  if (e.intervalleKm) {
+    const kmFait = v.km ?? (await dernierKm(e.elementId!)) ?? e.kmEcheance ?? 0;
+    const temps = estRecurrent(e) ? prochaineEcheance({ ...e, echeance: e.echeanceTemps ?? e.echeance }, jour) : null;
+    await db
+      .update(entretien)
+      .set({ ...SANS_RDV, echeanceInitiale: null, echeanceTemps: temps, kmEcheance: kmFait + e.intervalleKm, echeance: temps ?? e.echeance })
+      .where(eq(entretien.id, id));
+    await recalculerKm(e.elementId!);
+    return realisationId;
+  }
   const suivante = prochaineEcheance(e, jour);
   await db
     .update(entretien)

@@ -4,10 +4,11 @@ import { realisation, type Realisation } from "../db/schema";
 import { lireDate } from "../lib/dates";
 import { ErreurMetier } from "../../serveur/erreurs";
 import { supprimerFichiers } from "../../serveur/fichiers";
+import { ajouterReleve, recalculerKm } from "../../serveur/kilometrage";
 import { rattachement, type Rattachement } from "./entretiens";
 import { verifierVersion, versionDe } from "./version";
 
-type Saisie = Partial<Pick<Realisation, "date" | "titre" | "note" | "cout" | "prestataireId">>;
+type Saisie = Partial<Pick<Realisation, "date" | "titre" | "note" | "cout" | "prestataireId" | "kilometrage">>;
 
 /** Champs vérifiés : date valide, titre non vide, coût positif ; vides → null. */
 function nettoyer(v: Saisie) {
@@ -27,6 +28,10 @@ function nettoyer(v: Saisie) {
     r.cout = v.cout ?? null;
   }
   if (v.prestataireId !== undefined) r.prestataireId = v.prestataireId || null;
+  if (v.kilometrage !== undefined) {
+    if (v.kilometrage != null && (!Number.isInteger(v.kilometrage) || v.kilometrage < 0 || v.kilometrage > 5_000_000)) throw new ErreurMetier("Kilométrage invalide.");
+    r.kilometrage = v.kilometrage ?? null;
+  }
   return r;
 }
 
@@ -35,6 +40,11 @@ export async function creerRealisation(v: Saisie & Rattachement & { date: string
   const ou = rattachement(v);
   const valeurs = nettoyer(v);
   const id = newId();
+  // Véhicule : le kilométrage noté devient un relevé du compteur.
+  if (valeurs.kilometrage != null && ou.elementId) {
+    await ajouterReleve(ou.elementId, valeurs.date!, valeurs.kilometrage);
+    await recalculerKm(ou.elementId);
+  }
   await db.insert(realisation).values({ ...valeurs, id, ...ou, date: valeurs.date!, titre: valeurs.titre! });
   return id;
 }

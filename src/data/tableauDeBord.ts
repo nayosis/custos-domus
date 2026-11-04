@@ -14,10 +14,11 @@ import { ajouter } from "../lib/entretiens";
 export async function tableauDeBord(maisonId?: string | null) {
   const jour = aujourdhui();
   const annee = Number(jour.slice(0, 4));
-  const suivis = and(eq(maison.archivee, false), eq(element.archive, false), maisonId ? eq(maison.id, maisonId) : undefined);
   const lieu = { elementNom: element.nom, maisonId: maison.id, maisonNom: maison.nom };
-  // Chose à faire sur un élément (non archivé) ou directement sur la maison.
-  const suivie = and(eq(maison.archivee, false), or(isNull(entretien.elementId), eq(element.archive, false)), maisonId ? eq(maison.id, maisonId) : undefined);
+  // Chose à faire sur un élément (non archivé) ou directement sur la maison ; un véhicule n'a pas de maison
+  // (il apparaît quand on regarde toutes les maisons).
+  const maisonSuivie = maisonId ? eq(maison.id, maisonId) : or(isNull(maison.id), eq(maison.archivee, false));
+  const suivie = and(maisonSuivie, or(isNull(entretien.elementId), eq(element.archive, false)));
   const maisonDe = (t: typeof entretien | typeof realisation) => sql`${maison.id} = coalesce(${t.maisonId}, ${element.maisonId})`;
 
   const [entretiens, garanties, dernieres, depenses, achats] = await Promise.all([
@@ -25,38 +26,38 @@ export async function tableauDeBord(maisonId?: string | null) {
       .select({ ...getTableColumns(entretien), ...lieu, prestataireNom: prestataire.nom, prestataireTelephone: prestataire.telephone })
       .from(entretien)
       .leftJoin(element, eq(element.id, entretien.elementId))
-      .innerJoin(maison, maisonDe(entretien))
+      .leftJoin(maison, maisonDe(entretien))
       .leftJoin(prestataire, eq(prestataire.id, entretien.prestataireId))
       .where(and(suivie, eq(entretien.actif, true)))
       .orderBy(asc(entretien.echeance)),
     db
       .select({ id: element.id, nom: element.nom, finGarantie: element.finGarantie, maisonId: maison.id, maisonNom: maison.nom })
       .from(element)
-      .innerJoin(maison, eq(maison.id, element.maisonId))
-      .where(and(suivis, gte(element.finGarantie, ajouter(jour, -1, "mois")), lte(element.finGarantie, ajouter(jour, 3, "mois"))))
+      .leftJoin(maison, eq(maison.id, element.maisonId))
+      .where(and(maisonSuivie, eq(element.archive, false), gte(element.finGarantie, ajouter(jour, -1, "mois")), lte(element.finGarantie, ajouter(jour, 3, "mois"))))
       .orderBy(asc(element.finGarantie)),
     db
       .select({ ...getTableColumns(realisation), ...lieu, prestataireNom: prestataire.nom })
       .from(realisation)
       .leftJoin(element, eq(element.id, realisation.elementId))
-      .innerJoin(maison, maisonDe(realisation))
+      .leftJoin(maison, maisonDe(realisation))
       .leftJoin(prestataire, eq(prestataire.id, realisation.prestataireId))
       // L'historique d'un élément archivé (remplacé, vendu) compte encore : on ne filtre que les maisons.
-      .where(and(eq(maison.archivee, false), eq(realisation.passee, false), maisonId ? eq(maison.id, maisonId) : undefined))
+      .where(and(maisonSuivie, eq(realisation.passee, false)))
       .orderBy(desc(realisation.date), desc(realisation.creeLe))
       .limit(6),
     db
       .select({ annee: sql<string>`substr(${realisation.date}, 1, 4)`, total: sql<number>`coalesce(sum(${realisation.cout}), 0)`, nombre: sql<number>`count(${realisation.cout})` })
       .from(realisation)
       .leftJoin(element, eq(element.id, realisation.elementId))
-      .innerJoin(maison, maisonDe(realisation))
-      .where(and(eq(maison.archivee, false), maisonId ? eq(maison.id, maisonId) : undefined, gte(realisation.date, `${annee - 1}-01-01`), lte(realisation.date, `${annee}-12-31`)))
+      .leftJoin(maison, maisonDe(realisation))
+      .where(and(maisonSuivie, gte(realisation.date, `${annee - 1}-01-01`), lte(realisation.date, `${annee}-12-31`)))
       .groupBy(sql`1`),
     db
       .select({ total: sql<number>`coalesce(sum(${element.prix}), 0)` })
       .from(element)
-      .innerJoin(maison, eq(maison.id, element.maisonId))
-      .where(and(eq(maison.archivee, false), maisonId ? eq(maison.id, maisonId) : undefined, gte(element.dateAchat, `${annee}-01-01`), lte(element.dateAchat, `${annee}-12-31`))),
+      .leftJoin(maison, eq(maison.id, element.maisonId))
+      .where(and(maisonSuivie, gte(element.dateAchat, `${annee}-01-01`), lte(element.dateAchat, `${annee}-12-31`))),
   ]);
 
   const deLAnnee = (a: number) => depenses.find((d) => Number(d.annee) === a);

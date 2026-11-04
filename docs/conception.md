@@ -76,9 +76,15 @@ les voitures, et les enfants à qui confier des choses. Décisions prises (novem
    « Prochainement ») ; modèles « Routines » (poubelles verte et jaune, arrosage, draps). Les poubelles se notent la
    veille de la collecte : pas d'heure de rappel spécifique. Les migrations s'exécutent clés étrangères suspendues
    (vérifiées à la fin de chacune).
-3. Véhicules : rubrique à part (fiche, immatriculation, kilométrage) ; intervention rapide (moi ou un garage, prix
-   approximatif, km, photo de facture) ; **relevé du compteur** demandé le 1er du mois (relance 3 jours après) ;
-   entretiens au kilométrage « ou au temps, au premier atteint », date estimée d'après les relevés. Pas d'assurance.
+3. Véhicules (fait) : un véhicule est un élément de type `vehicule` **sans maison** (migration 0004, qui reconstruit
+   `element`) : il reprend documents, historique et choses à faire ; page **Véhicules** (`/vehicules`, dans « Plus »)
+   et fiche avec immatriculation et carte **Compteur**. Table `releve` (le compteur ne recule pas ; le kilométrage noté
+   sur une intervention devient un relevé). Entretiens « tous les N ans **ou** tous les N km, au premier atteint »
+   (`intervalle_km`, `km_echeance`, `echeance_temps`) : `echeance` est la plus proche de l'échéance au temps et de la
+   date estimée au rythme des relevés de l'année (deux relevés à deux semaines d'écart au moins) ; sans estimation ni
+   échéance au temps, dans un an. Relevé demandé le 1er du mois, relancé le 4 si rien depuis le 1er ; la notification
+   ouvre la saisie (`/elements/:id?releve=1`). Tableau de bord : les véhicules apparaissent sur « toutes les
+   maisons ». Modèles : révision (15 000 km), courroie, liquide de frein, pneus. Pas d'assurance.
 4. Famille : profils **enfant** (16 et 13 ans ; la plus petite plus tard) connectés par code PIN, sur la tablette
    partagée ou leur téléphone, qui ne voient que leurs missions ; missions attribuées ou à tour de rôle ; points
    (10 par défaut, fixés par mission), validés par n'importe quel parent (automatiquement après 48 h) ; objectif

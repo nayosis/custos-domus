@@ -5,9 +5,10 @@
  */
 import { and, asc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { db } from "../src/db/client";
-import { element, entretien, maison, prestataire } from "../src/db/schema";
+import { element, entretien, maison, prestataire, releve } from "../src/db/schema";
 import { dateLisible, maintenantLocal } from "../src/lib/dates";
 import { ajouter, joursEntre, libelleHeure, lieu, situation } from "../src/lib/entretiens";
+import { JOUR_RELANCE, JOUR_RELEVE } from "../src/lib/vehicules";
 import { envoyerEmail, envoyerPush, type Message } from "./envoi";
 import { abonnementsDe, configEnvoi, derniereTournee, destinataires, envoiEmailPossible, noterTournee } from "./reglages";
 
@@ -16,8 +17,9 @@ export const HEURE_RAPPELS = 8;
 
 /** Entretiens actifs et garanties des éléments suivis (rappels, flux d'agenda). */
 export async function chargerSuivi() {
-  const suivis = and(eq(maison.archivee, false), eq(element.archive, false));
-  const [entretiens, garanties] = await Promise.all([
+  // Un véhicule n'a pas de maison.
+  const maisonSuivie = or(isNull(maison.id), eq(maison.archivee, false));
+  const [entretiens, garanties, vehicules] = await Promise.all([
     db
       .select({
         id: entretien.id,
@@ -39,29 +41,36 @@ export async function chargerSuivi() {
       })
       .from(entretien)
       .leftJoin(element, eq(element.id, entretien.elementId))
-      .innerJoin(maison, sql`${maison.id} = coalesce(${entretien.maisonId}, ${element.maisonId})`)
+      .leftJoin(maison, sql`${maison.id} = coalesce(${entretien.maisonId}, ${element.maisonId})`)
       .leftJoin(prestataire, eq(prestataire.id, entretien.prestataireId))
-      .where(and(eq(maison.archivee, false), or(isNull(entretien.elementId), eq(element.archive, false)), eq(entretien.actif, true)))
+      .where(and(maisonSuivie, or(isNull(entretien.elementId), eq(element.archive, false)), eq(entretien.actif, true)))
       .orderBy(asc(entretien.echeance)),
     db
       .select({ id: element.id, nom: element.nom, maisonNom: maison.nom, finGarantie: element.finGarantie })
       .from(element)
-      .innerJoin(maison, eq(maison.id, element.maisonId))
-      .where(and(suivis, isNotNull(element.finGarantie)))
+      .leftJoin(maison, eq(maison.id, element.maisonId))
+      .where(and(maisonSuivie, eq(element.archive, false), isNotNull(element.finGarantie)))
       .orderBy(asc(element.finGarantie)),
+    db
+      .select({ id: element.id, nom: element.nom, dernierReleve: sql<string | null>`(select max(${releve.date}) from ${releve} where ${releve.elementId} = ${element.id})` })
+      .from(element)
+      .where(and(eq(element.type, "vehicule"), eq(element.archive, false)))
+      .orderBy(asc(element.nom)),
   ]);
-  return { entretiens, garanties: garanties as ((typeof garanties)[number] & { finGarantie: string })[] };
+  return { entretiens, garanties: garanties as ((typeof garanties)[number] & { finGarantie: string })[], vehicules };
 }
 
 type Suivi = Awaited<ReturnType<typeof chargerSuivi>>;
 type LigneEntretien = Suivi["entretiens"][number];
 type LigneGarantie = Suivi["garanties"][number];
+type LigneVehicule = Suivi["vehicules"][number];
 
 export type Alerte =
   | { type: "rdv_demain"; e: LigneEntretien }
   | { type: "en_retard"; e: LigneEntretien }
   | { type: "a_prevoir"; e: LigneEntretien }
-  | { type: "garantie"; g: LigneGarantie };
+  | { type: "garantie"; g: LigneGarantie }
+  | { type: "releve"; v: LigneVehicule; relance: boolean };
 
 export type Recapitulatif = { enRetard: LigneEntretien[]; aPrevoir: LigneEntretien[]; rendezVous: LigneEntretien[]; garanties: LigneGarantie[] };
 
@@ -72,7 +81,7 @@ export type Rappels = { jour: string; alertes: Alerte[]; recap: Recapitulatif | 
  * manqués sont rattrapées (une semaine au plus) ; le récapitulatif part si l'un de ces jours est un lundi.
  */
 export async function calculerRappels(jour: string, derniere: string | null, options: { suivi?: Suivi; recap?: boolean } = {}): Promise<Rappels> {
-  const { entretiens, garanties } = options.suivi ?? (await chargerSuivi());
+  const { entretiens, garanties, vehicules = [] } = options.suivi ?? (await chargerSuivi());
   let debut = derniere && derniere < jour ? ajouter(derniere, 1, "jour") : jour;
   if (joursEntre(debut, jour) > 6) debut = ajouter(jour, -6, "jour");
   const jours = new Set<string>();
@@ -87,6 +96,15 @@ export async function calculerRappels(jour: string, derniere: string | null, opt
     else if (jours.has(ajouter(e.echeance, -e.delaiAlerteJours, "jour"))) alertes.push({ type: "a_prevoir", e });
   }
   for (const g of garanties) if (jours.has(ajouter(g.finGarantie, -1, "mois"))) alertes.push({ type: "garantie", g });
+  // Relevé du compteur : demandé le 1er du mois, relancé le 4 si rien n'a été saisi depuis le 1er.
+  for (const d of jours) {
+    const quantieme = Number(d.slice(8, 10));
+    const debutMois = `${d.slice(0, 8)}01`;
+    for (const v of vehicules) {
+      if (quantieme === JOUR_RELEVE && !(v.dernierReleve && v.dernierReleve >= d)) alertes.push({ type: "releve", v, relance: false });
+      if (quantieme === JOUR_RELANCE && !(v.dernierReleve && v.dernierReleve >= debutMois)) alertes.push({ type: "releve", v, relance: true });
+    }
+  }
 
   let recap: Recapitulatif | null = null;
   if (lundi) {
@@ -104,7 +122,7 @@ export async function calculerRappels(jour: string, derniere: string | null, opt
 
 // --- Mise en forme
 
-const ou = (e: { elementNom: string | null; maisonNom: string }) => lieu(e);
+const ou = (e: { elementNom: string | null; maisonNom: string | null }) => lieu(e);
 const aLHeure = (e: LigneEntretien) => (e.heureRdv ? ` à ${libelleHeure(e.heureRdv)}` : "");
 const action = (e: LigneEntretien) => (e.nature === "rdv" ? "rendez-vous à prendre" : "à faire");
 
@@ -119,7 +137,9 @@ function phrase(a: Alerte, jour: string) {
     case "a_prevoir":
       return `${a.e.nature === "rdv" ? "Rendez-vous à prendre" : "À faire"} : ${a.e.titre} — ${ou(a.e)}, avant le ${dateLisible(a.e.echeance)}`;
     case "garantie":
-      return `Garantie : ${a.g.nom} (${a.g.maisonNom}) n'est plus garanti après le ${dateLisible(a.g.finGarantie)}${a.g.finGarantie < jour ? "" : ", dans un mois"}`;
+      return `Garantie : ${a.g.nom}${a.g.maisonNom ? ` (${a.g.maisonNom})` : ""} n'est plus garanti après le ${dateLisible(a.g.finGarantie)}${a.g.finGarantie < jour ? "" : ", dans un mois"}`;
+    case "releve":
+      return `${a.relance ? "Rappel : relevé du compteur" : "Relevé du compteur"} — ${a.v.nom} : notez le kilométrage, il sert à prévoir les entretiens`;
   }
 }
 
@@ -128,7 +148,7 @@ function sectionsRecap(r: Recapitulatif, jour: string) {
     { titre: "En retard", lignes: r.enRetard.map((e) => `${e.titre} — ${ou(e)} (depuis le ${dateLisible(e.echeance)})`) },
     { titre: "À prévoir", lignes: r.aPrevoir.map((e) => `${e.titre} — ${ou(e)} : ${action(e)} avant le ${dateLisible(e.echeance)}`) },
     { titre: "Rendez-vous de la semaine", lignes: r.rendezVous.map((e) => `${dateLisible(e.dateRdv, { weekday: "long", day: "numeric", month: "long" })}${aLHeure(e)} : ${e.titre} — ${ou(e)}`) },
-    { titre: "Garanties qui expirent", lignes: r.garanties.map((g) => `${g.nom} (${g.maisonNom}) : le ${dateLisible(g.finGarantie)}${g.finGarantie === jour ? " (aujourd'hui)" : ""}`) },
+    { titre: "Garanties qui expirent", lignes: r.garanties.map((g) => `${lieu({ elementNom: g.nom, maisonNom: g.maisonNom }, " — ")} : le ${dateLisible(g.finGarantie)}${g.finGarantie === jour ? " (aujourd'hui)" : ""}`) },
   ].filter((s) => s.lignes.length);
 }
 
@@ -176,7 +196,10 @@ ${lien ? `<p style="margin:20px 0 4px"><a href="${echapper(lien)}" style="backgr
       ? alertes[0].split(" — ").slice(1).join(" — ") || alertes[0]
       : alertes.map((a) => a.split(" — ")[0]).join(" · ")
     : `${nbRecap} entretien${nbRecap > 1 ? "s" : ""} à suivre cette semaine`;
-  return { sujet, texte, html, push: { titre: alertes.length === 1 && !r.recap ? sujet : "Custos Domus", corps, url: "/" } };
+  // Un seul relevé demandé : la notification ouvre directement la saisie.
+  const seule = r.alertes.length === 1 && !r.recap ? r.alertes[0] : null;
+  const url = seule?.type === "releve" ? `/elements/${seule.v.id}?releve=1` : "/";
+  return { sujet, texte, html, push: { titre: alertes.length === 1 && !r.recap ? sujet : "Custos Domus", corps, url } };
 }
 
 // --- Envoi

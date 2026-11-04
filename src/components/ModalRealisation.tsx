@@ -24,14 +24,17 @@ export type Cible =
   | { mode: "intervention" }
   | { mode: "edition"; realisation: Realisation & { documents: Document[] } };
 
-type Saisie = { date: string | null; titre: string; note: string; cout: number | string; prestataireId: string | null };
+type Saisie = { date: string | null; titre: string; note: string; cout: number | string; prestataireId: string | null; km: number | string };
 
 const ACCEPTE = "application/pdf,image/jpeg,image/png,image/webp,image/gif,image/heic";
 
-/** `ou` : élément ou maison d'une nouvelle intervention (inutile pour les autres modes). */
-export function ModalRealisation({ ou, cible, onClose }: { ou?: Rattachement; cible: Cible | null; onClose: () => void }) {
+/**
+ * `ou` : élément ou maison d'une nouvelle intervention (inutile pour les autres modes) ;
+ * `vehicule` : on note aussi le kilométrage (il devient un relevé du compteur).
+ */
+export function ModalRealisation({ ou, cible, vehicule = false, onClose }: { ou?: Rattachement; cible: Cible | null; vehicule?: boolean; onClose: () => void }) {
   const { tactile } = useEcran();
-  const [v, setV] = useState<Saisie>({ date: null, titre: "", note: "", cout: "", prestataireId: null });
+  const [v, setV] = useState<Saisie>({ date: null, titre: "", note: "", cout: "", prestataireId: null, km: "" });
   const [fichiers, setFichiers] = useState<File[]>([]);
   const [envoi, setEnvoi] = useState(false);
   const [cle, setCle] = useState<string | null>(null);
@@ -43,11 +46,11 @@ export function ModalRealisation({ ou, cible, onClose }: { ou?: Rattachement; ci
       const e = cible.entretien;
       // Un rendez-vous passé est probablement le jour où ça a été fait.
       const date = e.etat === "rdv_pris" && e.dateRdv && e.dateRdv <= aujourdhui() ? e.dateRdv : aujourdhui();
-      setV({ date, titre: e.titre, note: "", cout: "", prestataireId: e.prestataireId });
+      setV({ date, titre: e.titre, note: "", cout: "", prestataireId: e.prestataireId, km: "" });
     } else if (cible?.mode === "edition") {
       const r = cible.realisation;
-      setV({ date: r.date, titre: r.titre, note: r.note ?? "", cout: r.cout ?? "", prestataireId: r.prestataireId });
-    } else if (cible) setV({ date: aujourdhui(), titre: "", note: "", cout: "", prestataireId: null });
+      setV({ date: r.date, titre: r.titre, note: r.note ?? "", cout: r.cout ?? "", prestataireId: r.prestataireId, km: r.kilometrage ?? "" });
+    } else if (cible) setV({ date: aujourdhui(), titre: "", note: "", cout: "", prestataireId: null, km: "" });
   }
   const maj = (p: Partial<Saisie>) => setV((s) => ({ ...s, ...p }));
 
@@ -56,12 +59,15 @@ export function ModalRealisation({ ou, cible, onClose }: { ou?: Rattachement; ci
     setEnvoi(true);
     try {
       const commun = { date: v.date, note: v.note, cout: typeof v.cout === "number" ? v.cout : null, prestataireId: v.prestataireId };
+      const km = vehicule && typeof v.km === "number" ? v.km : null;
       const id = await ecrire<unknown>(() =>
         cible.mode === "entretien"
-          ? realiserEntretien(cible.entretien.id, commun)
+          ? realiserEntretien(cible.entretien.id, { ...commun, km })
           : cible.mode === "intervention"
-            ? creerRealisation({ ...commun, ...ou!, titre: v.titre })
-            : majRealisation(cible.realisation.id, { ...commun, titre: v.titre }, cible.realisation.modifieLe).then(() => cible.realisation.id),
+            ? creerRealisation({ ...commun, ...ou!, titre: v.titre, kilometrage: km })
+            : majRealisation(cible.realisation.id, { ...commun, titre: v.titre, ...(vehicule ? { kilometrage: km } : {}) }, cible.realisation.modifieLe).then(
+                () => cible.realisation.id,
+              ),
       );
       if (typeof id !== "string") return;
       // Pièces jointes : envoyées une fois la réalisation créée (factures, rapport d'intervention, photos).
@@ -87,13 +93,25 @@ export function ModalRealisation({ ou, cible, onClose }: { ou?: Rattachement; ci
     <Modal opened={!!cible} onClose={onClose} title={titreModal} size="lg">
       <Stack>
         {cible?.mode !== "entretien" && (
-          <TextInput label="Quoi" placeholder="Remplacement de la pompe de vidange, dépannage…" required value={v.titre} onChange={(e) => maj({ titre: e.currentTarget.value })} data-autofocus />
+          <TextInput label="Quoi" placeholder={vehicule ? "Batterie changée, plaquettes de frein…" : "Remplacement de la pompe de vidange, dépannage…"} required value={v.titre} onChange={(e) => maj({ titre: e.currentTarget.value })} data-autofocus />
         )}
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
           <ChampDate label="Date" required value={v.date} onChange={(d) => maj({ date: d })} />
           <NumberInput label="Coût" suffix=" €" decimalSeparator="," thousandSeparator=" " min={0} decimalScale={2} value={v.cout} onChange={(x) => maj({ cout: x })} />
         </SimpleGrid>
-        <ChampPrestataire label="Fait par" value={v.prestataireId} onChange={(p) => maj({ prestataireId: p })} />
+        {vehicule && (
+          <NumberInput
+            label="Kilométrage"
+            description="Facultatif : compte comme un relevé du compteur"
+            suffix=" km"
+            thousandSeparator=" "
+            min={0}
+            allowDecimal={false}
+            value={v.km}
+            onChange={(x) => maj({ km: x })}
+          />
+        )}
+        <ChampPrestataire label="Fait par" placeholder={vehicule ? "Moi-même, ou un garage" : undefined} value={v.prestataireId} onChange={(p) => maj({ prestataireId: p })} />
         <Textarea
           label={cible?.mode === "entretien" ? "Compte rendu" : "Notes"}
           placeholder={cible?.mode === "entretien" ? "Relevés, pièces changées, remarques du technicien…" : "Panne constatée, pièce changée, garantie de la réparation…"}

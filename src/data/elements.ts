@@ -5,15 +5,17 @@ import { aujourdhui } from "../lib/dates";
 import { ajouter, estRecurrent, type Unite } from "../lib/entretiens";
 import { ErreurMetier } from "../../serveur/erreurs";
 import { supprimerFichiers } from "../../serveur/fichiers";
+import { relevesDe } from "../../serveur/kilometrage";
 import { sansTrace, verifierVersion, versionDe } from "./version";
 
 type Saisie = Partial<Omit<Element, "id" | "creeLe" | "creePar" | "modifiePar" | "modifieLe">>;
 
-const TEXTES = ["nom", "categorie", "emplacement", "marque", "modele", "numeroSerie", "dateAchat", "dateMiseEnService", "vendeur", "finGarantie", "notes"] as const;
+const TEXTES = ["nom", "categorie", "emplacement", "marque", "modele", "numeroSerie", "immatriculation", "dateAchat", "dateMiseEnService", "vendeur", "finGarantie", "notes"] as const;
 
 /** Textes rognés, champs vides → null ; l'identifiant et la date de création ne viennent jamais du navigateur. */
 function nettoyer(v: Saisie & { id?: unknown; creeLe?: unknown }) {
-  const { id: _id, creeLe: _c, ...reste } = sansTrace(v);
+  // Le type et la maison ne changent pas après coup (un véhicule reste un véhicule).
+  const { id: _id, creeLe: _c, type: _t, ...reste } = sansTrace(v);
   const r: Saisie = { ...reste };
   for (const k of TEXTES) {
     const x = r[k];
@@ -23,7 +25,7 @@ function nettoyer(v: Saisie & { id?: unknown; creeLe?: unknown }) {
   return r;
 }
 
-/** Tous les éléments (actifs d'abord), avec leur maison et leur nombre de documents. */
+/** Tous les équipements (actifs d'abord), avec leur maison et leur nombre de documents ; pas les véhicules. */
 export const listeElements = () =>
   db
     .select({
@@ -41,7 +43,7 @@ export async function ficheElement(id: string) {
   const [ligne] = await db
     .select({ element, maison: { id: maison.id, nom: maison.nom, archivee: maison.archivee } })
     .from(element)
-    .innerJoin(maison, eq(maison.id, element.maisonId))
+    .leftJoin(maison, eq(maison.id, element.maisonId))
     .where(eq(element.id, id));
   if (!ligne) throw new ErreurMetier("Élément introuvable", 404);
   const [documents, remplace] = await Promise.all([
@@ -69,7 +71,8 @@ export async function ficheElement(id: string) {
   const remplacant = ligne.element.remplacePar
     ? ((await db.select({ id: element.id, nom: element.nom }).from(element).where(eq(element.id, ligne.element.remplacePar)))[0] ?? null)
     : null;
-  return { ...ligne, documents, entretiens, historique, remplace, remplacant };
+  const releves = ligne.element.type === "vehicule" ? await relevesDe(id) : [];
+  return { ...ligne, documents, entretiens, historique, remplace, remplacant, releves };
 }
 
 /**
@@ -83,7 +86,9 @@ export async function remplacerElement(id: string, nouveau: Saisie & { nom: stri
   const valeurs = nettoyer(nouveau);
   if (!valeurs.nom) throw new ErreurMetier("Le nom est obligatoire.");
   const nouvelId = newId();
-  await db.insert(element).values({ categorie: ancien.categorie, emplacement: ancien.emplacement, ...valeurs, id: nouvelId, maisonId: ancien.maisonId, nom: valeurs.nom });
+  await db
+    .insert(element)
+    .values({ categorie: ancien.categorie, emplacement: ancien.emplacement, ...valeurs, id: nouvelId, type: ancien.type, maisonId: ancien.maisonId, nom: valeurs.nom });
   const depart = valeurs.dateMiseEnService ?? valeurs.dateAchat ?? aujourdhui();
   const actifs = (await db.select().from(entretien).where(eq(entretien.elementId, id))).filter((e) => e.actif);
   for (const e of actifs) {

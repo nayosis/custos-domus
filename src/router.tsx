@@ -4,6 +4,7 @@ import { Layout } from "./components/Layout";
 import { SurOrdinateur } from "./components/SurOrdinateur";
 import { Accueil } from "./pages/Accueil";
 import { AFaire } from "./pages/AFaire";
+import { Vehicules } from "./pages/Vehicules";
 import { Elements } from "./pages/Elements";
 import { FicheElement } from "./pages/FicheElement";
 import { Maisons } from "./pages/Maisons";
@@ -69,7 +70,14 @@ export const elementsRoute = createRoute({
   component: Elements,
   validateSearch: (s: Record<string, unknown>): { maison?: string } => (typeof s.maison === "string" ? { maison: s.maison } : {}),
 });
-export const ficheElementRoute = createRoute({ getParentRoute: () => application, path: "/elements/$id", component: FicheElement });
+export const ficheElementRoute = createRoute({
+  getParentRoute: () => application,
+  path: "/elements/$id",
+  component: FicheElement,
+  // releve=1 : ouvrir la saisie du compteur (lien de la notification mensuelle).
+  validateSearch: (s: Record<string, unknown>): { releve?: boolean } => (s.releve === 1 || s.releve === "1" || s.releve === true ? { releve: true } : {}),
+});
+const vehicules = createRoute({ getParentRoute: () => application, path: "/vehicules", component: Vehicules });
 const prestataires = createRoute({ getParentRoute: () => application, path: "/prestataires", component: Prestataires });
 const notificationsRoute = createRoute({ getParentRoute: () => application, path: "/notifications", component: Notifications });
 const sauvegarde = createRoute({ getParentRoute: () => application, path: "/sauvegarde", component: surOrdinateur(Sauvegarde, "Sauvegarde"), beforeLoad: reserveAdmin });
@@ -77,7 +85,7 @@ const comptes = createRoute({ getParentRoute: () => application, path: "/comptes
 const journal = createRoute({ getParentRoute: () => application, path: "/journal", component: surOrdinateur(Journal, "Journal"), beforeLoad: reserveAdmin });
 
 export const router = createRouter({
-  routeTree: racine.addChildren([connexionRoute, lienRoute, application.addChildren([accueilRoute, aFaireRoute, maisons, elementsRoute, ficheElementRoute, prestataires, notificationsRoute, sauvegarde, comptes, journal])]),
+  routeTree: racine.addChildren([connexionRoute, lienRoute, application.addChildren([accueilRoute, aFaireRoute, maisons, elementsRoute, ficheElementRoute, vehicules, prestataires, notificationsRoute, sauvegarde, comptes, journal])]),
   history: createBrowserHistory(),
 });
 

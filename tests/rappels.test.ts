@@ -63,6 +63,7 @@ describe("calcul des rappels", () => {
       entretien({ titre: "Ramonage", echeance: "2027-03-01" }),
     ],
     garanties: [{ id: "g", nom: "Lave-linge", maisonNom: "Maison", finGarantie: "2026-12-03" }],
+    vehicules: [],
   };
 
   test("alertes du jour : fenêtre qui s'ouvre, retard, rendez-vous demain, garantie à un mois ; pas de récapitulatif le mardi", async () => {

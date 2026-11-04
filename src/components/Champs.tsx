@@ -21,14 +21,16 @@ export function ChampDate(props: {
 }
 
 /** Choix d'un prestataire ; son téléphone s'affiche en dessous, prêt à appeler. */
-export function ChampPrestataire({ label = "Prestataire", value, onChange }: { label?: string; value: string | null; onChange: (v: string | null) => void }) {
+export function ChampPrestataire({
+  label = "Prestataire", placeholder, value, onChange,
+}: { label?: string; placeholder?: string; value: string | null; onChange: (v: string | null) => void }) {
   const { data: prestataires = [] } = useQuery({ queryKey: ["prestataires"], queryFn: () => listePrestataires() });
   const choisi = prestataires.find((p) => p.id === value);
   return (
     <div>
       <Select
         label={label}
-        placeholder={prestataires.length ? "Aucun" : "Aucun prestataire enregistré"}
+        placeholder={placeholder ?? (prestataires.length ? "Aucun" : "Aucun prestataire enregistré")}
         data={prestataires.map((p) => ({ value: p.id, label: p.metier ? `${p.nom} (${p.metier})` : p.nom }))}
         value={value}
         onChange={onChange}

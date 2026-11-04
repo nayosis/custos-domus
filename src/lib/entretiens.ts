@@ -23,8 +23,9 @@ export const estUnite = (x: unknown): x is Unite => typeof x === "string" && Obj
  */
 export const DELAI_DEFAUT: Record<Nature, number> = { rdv: 42, tache: 7, routine: 0 };
 
-/** Où se trouve une chose à faire : « Pompe à chaleur, Maison principale », ou la maison seule. */
-export const lieu = (e: { elementNom?: string | null; maisonNom: string }, separateur = ", ") => (e.elementNom ? `${e.elementNom}${separateur}${e.maisonNom}` : e.maisonNom);
+/** Où se trouve une chose à faire : « Pompe à chaleur, Maison principale », la maison seule, ou le véhicule seul. */
+export const lieu = (e: { elementNom?: string | null; maisonNom: string | null }, separateur = ", ") =>
+  [e.elementNom, e.maisonNom].filter(Boolean).join(separateur);
 
 const enDate = (d: string) => {
   const [a, m, j] = d.slice(0, 10).split("-").map(Number);

@@ -46,14 +46,20 @@ export const prestataire = sqliteTable("prestataire", {
 });
 
 /** Un équipement de la maison (fosse septique, PAC) ou un bien acheté (PC, lave-linge). */
+/**
+ * Un équipement d'une maison, ou un véhicule (type « vehicule », sans maison : la voiture n'est pas un
+ * équipement de la maison ; immatriculation et relevés de compteur).
+ */
 export const element = sqliteTable(
   "element",
   {
     id: id(),
-    maisonId: text("maison_id")
-      .notNull()
-      .references(() => maison.id, { onDelete: "cascade" }),
+    /** equipement, vehicule */
+    type: text("type").notNull().default("equipement"),
+    /** Toujours renseignée pour un équipement, vide pour un véhicule. */
+    maisonId: text("maison_id").references(() => maison.id, { onDelete: "cascade" }),
     nom: text("nom").notNull(),
+    immatriculation: text("immatriculation"),
     categorie: text("categorie"),
     /** Texte libre : « garage », « jardin, côté nord »… */
     emplacement: text("emplacement"),
@@ -110,6 +116,13 @@ export const entretien = sqliteTable(
     prestataireId: text("prestataire_id").references(() => prestataire.id, { onDelete: "set null" }),
     notes: text("notes"),
     actif: integer("actif", { mode: "boolean" }).notNull().default(true),
+    /**
+     * Véhicule : « ou tous les N km, au premier atteint ». kmEcheance : kilométrage visé ; echeanceTemps :
+     * l'échéance au temps seule. `echeance` est alors la plus proche des deux (date estimée d'après les relevés).
+     */
+    intervalleKm: integer("intervalle_km"),
+    kmEcheance: integer("km_echeance"),
+    echeanceTemps: text("echeance_temps"),
     creeLe: creeLe(),
     ...tracabilite(),
   },
@@ -135,6 +148,8 @@ export const realisation = sqliteTable(
     prestataireId: text("prestataire_id").references(() => prestataire.id, { onDelete: "set null" }),
     /** Occurrence passée (sautée) volontairement : ni dépense ni statistique ; la note porte le motif. */
     passee: integer("passee", { mode: "boolean" }).notNull().default(false),
+    /** Véhicule : kilométrage au moment de l'intervention. */
+    kilometrage: integer("kilometrage"),
     creeLe: creeLe(),
     ...tracabilite(),
   },
@@ -171,10 +186,27 @@ export const modeleEntretien = sqliteTable("modele_entretien", {
   nature: text("nature").notNull().default("tache"),
   intervalleValeur: integer("intervalle_valeur"),
   intervalleUnite: text("intervalle_unite"),
+  intervalleKm: integer("intervalle_km"),
   delaiAlerteJours: integer("delai_alerte_jours").notNull(),
   description: text("description"),
   creeLe: creeLe(),
 });
+
+/** Relevé du compteur d'un véhicule (demandé chaque mois) : sert à estimer quand tombent les entretiens au kilométrage. */
+export const releve = sqliteTable(
+  "releve",
+  {
+    id: id(),
+    elementId: text("element_id")
+      .notNull()
+      .references(() => element.id, { onDelete: "cascade" }),
+    date: text("date").notNull(),
+    km: integer("km").notNull(),
+    creeLe: creeLe(),
+    ...tracabilite(),
+  },
+  (t) => [index("releve_element_idx").on(t.elementId, t.date)],
+);
 
 export type Maison = typeof maison.$inferSelect;
 export type Prestataire = typeof prestataire.$inferSelect;
@@ -197,3 +229,4 @@ export const journal = sqliteTable(
   },
   (t) => [index("journal_quand_idx").on(t.quand), index("journal_utilisateur_idx").on(t.utilisateur)],
 );
+export type Releve = typeof releve.$inferSelect;

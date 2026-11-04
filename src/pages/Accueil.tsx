@@ -77,20 +77,20 @@ function Bloc({ titre, icone, vide, children }: { titre: string; icone: ReactNod
 }
 
 /**
- * Lien vers la fiche de l'élément, avec sa maison quand on regarde toutes les maisons ;
+ * Lien vers la fiche de l'élément (ou du véhicule), avec sa maison quand on regarde toutes les maisons ;
  * pour ce qui se fait sur la maison elle-même, lien vers sa page « À faire ».
  */
 function Ou({
   elementId, elementNom, maisonId, maisonNom, avecMaison,
-}: { elementId: string | null; elementNom: string | null; maisonId: string; maisonNom: string; avecMaison: boolean }) {
+}: { elementId: string | null; elementNom: string | null; maisonId: string | null; maisonNom: string | null; avecMaison: boolean }) {
   return (
     <Text size="xs" c="dimmed" truncate>
-      {elementId ? (
+      {elementId || !maisonId ? (
         <>
-          <Anchor size="xs" c="dimmed" renderRoot={(p) => <Link {...p} to="/elements/$id" params={{ id: elementId }} />}>
+          <Anchor size="xs" c="dimmed" renderRoot={(p) => <Link {...p} to="/elements/$id" params={{ id: elementId ?? "" }} />}>
             {elementNom}
           </Anchor>
-          {avecMaison && ` · ${maisonNom}`}
+          {avecMaison && maisonNom && ` · ${maisonNom}`}
         </>
       ) : (
         <Anchor size="xs" c="dimmed" renderRoot={(p) => <Link {...p} to="/a-faire" search={{ maison: maisonId }} />}>

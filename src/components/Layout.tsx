@@ -3,7 +3,7 @@ import {
   Alert, AppShell, Badge, Box, Burger, Button, Divider, Drawer, Group, Menu, Modal, NavLink, PasswordInput, Stack, Text, UnstyledButton, SegmentedControl, useMantineColorScheme,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconBell, IconBrandGithub, IconChevronUp, IconDatabaseExport, IconDots, IconHistory, IconHome, IconKey, IconLayoutDashboard, IconListCheck, IconLogout, IconPackage, IconTool, IconUserCog } from "@tabler/icons-react";
+import { IconBell, IconBrandGithub, IconChevronUp, IconDatabaseExport, IconDots, IconHistory, IconHome, IconKey, IconCar, IconLayoutDashboard, IconListCheck, IconLogout, IconPackage, IconTool, IconUserCog } from "@tabler/icons-react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { appelApi } from "../lib/rpc";
 import { deconnexion, estAdmin, LIBELLES_ROLES, utilisateur } from "../lib/session";
@@ -22,6 +22,7 @@ const ENTREES: Entree[] = [
   { to: "/a-faire", label: "À faire", icone: IconListCheck, actif: (p) => p.startsWith("/a-faire") },
   { to: "/maisons", label: "Maisons", icone: IconHome, actif: (p) => p.startsWith("/maisons") },
   { to: "/elements", label: "Éléments", icone: IconPackage, actif: (p) => p.startsWith("/elements") },
+  { to: "/vehicules", label: "Véhicules", barre: false, icone: IconCar, actif: (p) => p.startsWith("/vehicules") },
   { to: "/prestataires", label: "Prestataires", court: "Artisans", barre: false, icone: IconTool, actif: (p) => p.startsWith("/prestataires") },
 ];
 
