@@ -1,3 +1,4 @@
+import { BadgeMission } from "./Entretiens";
 import { useState } from "react";
 import { ActionIcon, Anchor, Badge, Button, Card, Group, Menu, Stack, Text, Timeline, Title } from "@mantine/core";
 import { modals } from "@mantine/modals";
@@ -83,6 +84,9 @@ export function Historique({ ou, historique, vehicule = false }: { ou: Rattachem
                       <Badge size="xs" variant="light" color="gray">
                         Intervention
                       </Badge>
+                    )}
+                    {r.validation && (
+                      <BadgeMission e={{ points: r.points, enfantId: r.enfantId }} suffixe={r.validation === "refusee" ? "refusée" : r.validation === "a_valider" ? "à valider" : undefined} />
                     )}
                   </Group>
                   <Menu position="bottom-end">

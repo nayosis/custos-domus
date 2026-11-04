@@ -3,8 +3,10 @@ import {
   Alert, AppShell, Badge, Box, Burger, Button, Divider, Drawer, Group, Menu, Modal, NavLink, PasswordInput, Stack, Text, UnstyledButton, SegmentedControl, useMantineColorScheme,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconBell, IconBrandGithub, IconChevronUp, IconDatabaseExport, IconDots, IconHistory, IconHome, IconKey, IconCar, IconLayoutDashboard, IconListCheck, IconLogout, IconPackage, IconTool, IconUserCog } from "@tabler/icons-react";
+import { IconBell, IconBrandGithub, IconChevronUp, IconDatabaseExport, IconDots, IconHistory, IconHome, IconKey, IconCar, IconLayoutDashboard, IconListCheck, IconLogout, IconPackage, IconTool, IconUserCog, IconUsers } from "@tabler/icons-react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { famille } from "../data/famille";
 import { appelApi } from "../lib/rpc";
 import { deconnexion, estAdmin, LIBELLES_ROLES, utilisateur } from "../lib/session";
 import { useEvenements } from "../hooks/useEvenements";
@@ -23,8 +25,15 @@ const ENTREES: Entree[] = [
   { to: "/maisons", label: "Maisons", icone: IconHome, actif: (p) => p.startsWith("/maisons") },
   { to: "/elements", label: "Éléments", icone: IconPackage, actif: (p) => p.startsWith("/elements") },
   { to: "/vehicules", label: "Véhicules", barre: false, icone: IconCar, actif: (p) => p.startsWith("/vehicules") },
+  { to: "/famille", label: "Famille", barre: false, icone: IconUsers, actif: (p) => p.startsWith("/famille") },
   { to: "/prestataires", label: "Prestataires", court: "Artisans", barre: false, icone: IconTool, actif: (p) => p.startsWith("/prestataires") },
 ];
+
+/** Missions faites à valider et récompenses demandées : ce qui attend un parent. */
+export function useAttenteFamille() {
+  const { data } = useQuery({ queryKey: ["famille"], queryFn: () => famille() });
+  return data ? data.aValider.length + data.demandes.filter((d) => d.statut === "demandee").length : 0;
+}
 
 /** Pour tous, dans le menu (pas dans la barre du bas du téléphone). */
 const ENTREES_COMPTE: Entree[] = [{ to: "/notifications", label: "Notifications", icone: IconBell, actif: (p) => p.startsWith("/notifications") }];
@@ -159,10 +168,26 @@ function Marque() {
 }
 
 function Liens({ chemin, surClic }: { chemin: string; surClic?: () => void }) {
+  const attente = useAttenteFamille();
   return (
     <>
       {liens().map((e) => (
-        <NavLink key={e.to} component={Link} to={e.to} label={e.label} leftSection={<e.icone size={18} />} active={e.actif(chemin)} onClick={surClic} />
+        <NavLink
+          key={e.to}
+          component={Link}
+          to={e.to}
+          label={e.label}
+          leftSection={<e.icone size={18} />}
+          rightSection={
+            e.to === "/famille" && attente > 0 ? (
+              <Badge size="sm" circle color="brique">
+                {attente}
+              </Badge>
+            ) : undefined
+          }
+          active={e.actif(chemin)}
+          onClick={surClic}
+        />
       ))}
     </>
   );
@@ -170,6 +195,7 @@ function Liens({ chemin, surClic }: { chemin: string; surClic?: () => void }) {
 
 /** Téléphone : les pages les plus utiles en bas de l'écran, le reste dans « Plus ». */
 function BarreBas({ chemin, onPlus }: { chemin: string; onPlus: () => void }) {
+  const attente = useAttenteFamille();
   const bouton = (contenu: React.ReactNode, actif: boolean) => (
     <Stack gap={2} align="center" c={actif ? "brique.6" : "dimmed"} py={6} style={{ flex: 1 }}>
       {contenu}
@@ -196,7 +222,10 @@ function BarreBas({ chemin, onPlus }: { chemin: string; onPlus: () => void }) {
       <UnstyledButton onClick={onPlus} style={{ flex: 1 }}>
         {bouton(
           <>
-            <IconDots size={22} />
+            <Box pos="relative">
+              <IconDots size={22} />
+              {attente > 0 && <Box pos="absolute" top={-2} right={-4} w={8} h={8} bg="brique.6" style={{ borderRadius: "50%" }} aria-label="À valider dans Famille" />}
+            </Box>
             <Text size="xs">Plus</Text>
           </>,
           false,

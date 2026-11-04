@@ -12,7 +12,11 @@ function cibleDe(args: unknown[], resultat: unknown) {
 
 /** Résumé lisible des arguments (tronqué) : utile pour savoir ce qui a été changé. */
 function resumeDe(args: unknown[]) {
-  const texte = JSON.stringify(args.filter((a) => !(typeof a === "string" && UUID.test(a))));
+  // Les codes PIN des enfants ne sont jamais écrits dans le journal.
+  const texte = JSON.stringify(
+    args.filter((a) => !(typeof a === "string" && UUID.test(a))),
+    (cle, v) => (cle === "pin" ? "••••" : v),
+  );
   return texte.length > 400 ? `${texte.slice(0, 399)}…` : texte;
 }
 

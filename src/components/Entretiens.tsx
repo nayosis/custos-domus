@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import {
-  ActionIcon, Alert, Badge, Box, Button, Card, Collapse, Group, Menu, Modal, NumberInput, Radio, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Textarea, Title, UnstyledButton,
+  ActionIcon, Alert, Badge, Box, Button, Card, Collapse, Group, Menu, Modal, MultiSelect, NumberInput, Radio, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Textarea, Title, UnstyledButton,
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
@@ -8,6 +8,7 @@ import { TimeInput } from "@mantine/dates";
 import {
   IconCalendarCheck, IconCalendarEvent, IconCalendarX, IconCheck, IconChevronDown, IconChevronRight, IconClockPause, IconDots, IconPlayerPause, IconPlayerPlay,
   IconPlayerSkipForward, IconPencil, IconPlus, IconListCheck, IconRotateClockwise, IconTool, IconTrash,
+  IconUser,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -22,11 +23,25 @@ import {
 import { ecrire } from "../lib/query";
 import { km, libelleKm } from "../lib/vehicules";
 import { ChampDate, ChampPrestataire } from "./Champs";
+import { listeEnfants, tourDe } from "../data/famille";
+import { POINTS_DEFAUT } from "../lib/famille";
 import { ModalRealisation } from "./ModalRealisation";
 
 export type LigneEntretien = Entretien & { prestataireNom: string | null };
 
 /** Icône d'une chose à faire selon sa nature. */
+/** Mission confiée à un enfant : son prénom (celui dont c'est le tour) et les points. */
+export function BadgeMission({ e, suffixe }: { e: { points: number | null; enfantId: string | null }; suffixe?: string }) {
+  const { data: enfants = [] } = useQuery({ queryKey: ["enfants"], queryFn: () => listeEnfants(), enabled: e.points != null });
+  if (e.points == null) return null;
+  const prenom = enfants.find((x) => x.id === e.enfantId)?.prenom;
+  return (
+    <Badge size="sm" variant="outline" color="brique" leftSection={<IconUser size={11} />}>
+      {prenom ?? "Mission"} · {e.points} pts{suffixe ? ` · ${suffixe}` : ""}
+    </Badge>
+  );
+}
+
 export const IconeNature = ({ nature, size = 20 }: { nature: string; size?: number }) => {
   const Icone = nature === "rdv" ? IconCalendarEvent : nature === "routine" ? IconRotateClockwise : IconTool;
   return <Icone size={size} color="var(--mantine-color-brique-6)" style={{ flexShrink: 0 }} />;
@@ -131,6 +146,48 @@ const depuis = (e: Entretien): Saisie => ({
   kmDerniere: "",
 });
 
+/**
+ * Confier aux enfants : un enfant (mission attribuée) ou plusieurs (à tour de rôle, dans l'ordre choisi), et les points.
+ * `mission` vaut undefined tant que le tour d'une mission existante n'est pas chargé (rien n'est alors envoyé).
+ */
+function useMission(entretien: Entretien | null, opened: boolean) {
+  const { data: enfants = [] } = useQuery({ queryKey: ["enfants"], queryFn: () => listeEnfants(), enabled: opened });
+  const estMission = !!entretien && entretien.points != null;
+  const { data: tour } = useQuery({ queryKey: ["tour", entretien?.id], queryFn: () => tourDe(entretien!.id), enabled: opened && estMission });
+  const [choix, setChoix] = useState<string[] | null>(null);
+  const [pts, setPts] = useState<number | string>(POINTS_DEFAUT);
+  const [cle, setCle] = useState<string | null>(null);
+  const ouverture = opened ? (entretien?.id ?? "nouveau") : null;
+  if (ouverture !== cle) {
+    setCle(ouverture);
+    setChoix(estMission ? null : []);
+    setPts(entretien?.points ?? POINTS_DEFAUT);
+  }
+  if (choix === null && tour) setChoix(tour);
+  const valeur = choix ?? [];
+  const points = typeof pts === "number" ? pts : POINTS_DEFAUT;
+  const champ =
+    enfants.length === 0 ? null : (
+      <Card withBorder p="sm">
+        <Stack gap="xs">
+          <MultiSelect
+            label="Confier aux enfants"
+            description={valeur.length > 1 ? "À tour de rôle, dans cet ordre" : "Un enfant : attribuée ; plusieurs : à tour de rôle"}
+            placeholder={valeur.length ? undefined : "Personne : ce n'est pas une mission"}
+            data={enfants.filter((e) => e.actif || valeur.includes(e.id)).map((e) => ({ value: e.id, label: e.prenom }))}
+            value={valeur}
+            onChange={setChoix}
+            clearable
+          />
+          {valeur.length > 0 && (
+            <NumberInput label="Points" description="Gagnés une fois la mission validée par un parent" min={0} max={1000} allowDecimal={false} value={pts} onChange={setPts} w={200} />
+          )}
+        </Stack>
+      </Card>
+    );
+  return { champ, mission: choix === null ? undefined : valeur.length ? { enfants: valeur, points } : null };
+}
+
 /** Création (entretien absent), éventuellement depuis un modèle de la bibliothèque, ou modification. */
 function ModalEntretien({
   ou, categorie, vehicule, entretien, opened, onClose,
@@ -147,6 +204,7 @@ function ModalEntretien({
     if (opened) setV(entretien ? depuis(entretien) : ou.maisonId ? { ...VIDE, nature: "routine", delai: DELAI_DEFAUT.routine, ancrage: "fixe", intervalleUnite: "semaine" } : VIDE);
   }
   const maj = (p: Partial<Saisie>) => setV((s) => ({ ...s, ...p }));
+  const { champ: champMission, mission } = useMission(entretien, opened);
 
   // Modèles de la catégorie de l'élément en premier, puis les autres.
   const choixModeles = useMemo(() => {
@@ -196,6 +254,7 @@ function ModalEntretien({
       delaiAlerteJours: delai,
       prestataireId: routine ? null : v.prestataireId,
       notes: v.notes,
+      ...(mission !== undefined ? { mission } : {}),
     };
     const res = await ecrire<unknown>(() =>
       entretien
@@ -371,6 +430,7 @@ function ModalEntretien({
         ) : (
           <ChampPrestataire label="Prestataire habituel" value={v.prestataireId} onChange={(p) => maj({ prestataireId: p })} />
         )}
+        {champMission}
         <Textarea label="Notes" autosize minRows={2} value={v.notes} onChange={(e) => maj({ notes: e.currentTarget.value })} />
         <Button onClick={enregistrer} disabled={!valide}>
           Enregistrer
@@ -515,6 +575,7 @@ function Ligne({
             {e.titre}
           </Text>
           <BadgeSituation e={e} s={s} />
+          <BadgeMission e={e} />
         </Group>
         <Text size="xs" c="dimmed">
           {NATURES[e.nature as Nature]}

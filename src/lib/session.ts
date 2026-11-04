@@ -37,3 +37,19 @@ export async function deconnexion() {
   await appelApi("/api/auth/deconnexion", { corps: {} }).catch(() => undefined);
   location.assign("/connexion");
 }
+
+// --- Espace des enfants (code PIN) : une session à part, qui n'ouvre que leurs missions
+
+let enfantConnecte: string | null = null;
+/** Prénom de l'enfant connecté sur cet appareil (null sinon). */
+export const enfant = () => enfantConnecte;
+
+export async function chargerEnfant() {
+  try {
+    enfantConnecte = (await appelApi<{ prenom: string }>("/api/enfant/moi", { silencieux: true })).prenom;
+  } catch (e) {
+    if (!(e instanceof ErreurServeur && e.statut === 401)) throw e;
+    enfantConnecte = null;
+  }
+  return enfantConnecte;
+}

@@ -5,6 +5,8 @@ import { SurOrdinateur } from "./components/SurOrdinateur";
 import { Accueil } from "./pages/Accueil";
 import { AFaire } from "./pages/AFaire";
 import { Vehicules } from "./pages/Vehicules";
+import { Famille } from "./pages/Famille";
+import { EspaceEnfant } from "./pages/EspaceEnfant";
 import { Elements } from "./pages/Elements";
 import { FicheElement } from "./pages/FicheElement";
 import { Maisons } from "./pages/Maisons";
@@ -15,7 +17,7 @@ import { Connexion } from "./pages/compte/Connexion";
 import { Lien } from "./pages/compte/Lien";
 import { Comptes } from "./pages/compte/Comptes";
 import { Journal } from "./pages/compte/Journal";
-import { estAdmin, utilisateur } from "./lib/session";
+import { enfant, estAdmin, utilisateur } from "./lib/session";
 import { useEcran } from "./lib/ecran";
 
 /** Pages trop denses pour un téléphone : on y invite à passer sur ordinateur ou tablette. */
@@ -37,6 +39,8 @@ export const connexionRoute = createRoute({
   }),
 });
 export const lienRoute = createRoute({ getParentRoute: () => racine, path: "/lien/$jeton", component: Lien });
+/** Espace des enfants : connexion par code PIN, puis leurs missions (sans le menu de l'application). */
+const enfantRoute = createRoute({ getParentRoute: () => racine, path: "/enfant", component: EspaceEnfant });
 
 /** Tout le reste demande d'être connecté. */
 const application = createRoute({
@@ -44,7 +48,7 @@ const application = createRoute({
   id: "application",
   component: Layout,
   beforeLoad: ({ location }) => {
-    if (!utilisateur()) throw redirect({ to: "/connexion", search: { retour: location.href } });
+    if (!utilisateur()) throw enfant() ? redirect({ to: "/enfant" }) : redirect({ to: "/connexion", search: { retour: location.href } });
   },
 });
 const reserveAdmin = () => {
@@ -77,6 +81,7 @@ export const ficheElementRoute = createRoute({
   // releve=1 : ouvrir la saisie du compteur (lien de la notification mensuelle).
   validateSearch: (s: Record<string, unknown>): { releve?: boolean } => (s.releve === 1 || s.releve === "1" || s.releve === true ? { releve: true } : {}),
 });
+const familleRoute = createRoute({ getParentRoute: () => application, path: "/famille", component: Famille });
 const vehicules = createRoute({ getParentRoute: () => application, path: "/vehicules", component: Vehicules });
 const prestataires = createRoute({ getParentRoute: () => application, path: "/prestataires", component: Prestataires });
 const notificationsRoute = createRoute({ getParentRoute: () => application, path: "/notifications", component: Notifications });
@@ -85,7 +90,7 @@ const comptes = createRoute({ getParentRoute: () => application, path: "/comptes
 const journal = createRoute({ getParentRoute: () => application, path: "/journal", component: surOrdinateur(Journal, "Journal"), beforeLoad: reserveAdmin });
 
 export const router = createRouter({
-  routeTree: racine.addChildren([connexionRoute, lienRoute, application.addChildren([accueilRoute, aFaireRoute, maisons, elementsRoute, ficheElementRoute, vehicules, prestataires, notificationsRoute, sauvegarde, comptes, journal])]),
+  routeTree: racine.addChildren([connexionRoute, lienRoute, enfantRoute, application.addChildren([accueilRoute, aFaireRoute, maisons, elementsRoute, ficheElementRoute, vehicules, familleRoute, prestataires, notificationsRoute, sauvegarde, comptes, journal])]),
   history: createBrowserHistory(),
 });
 

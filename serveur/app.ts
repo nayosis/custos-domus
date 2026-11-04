@@ -12,6 +12,7 @@ import { diffuser, fluxEvenements } from "./evenements";
 import { journaliser, lireJournal } from "./journal";
 import { etatMiseAJour } from "./miseAJour";
 import { routesRappels } from "./routesRappels";
+import { routesEnfants } from "./routesEnfants";
 import { cheminSauvegarde, etatSauvegardeAuto, listeSauvegardes, nomSauvegardeValide, sauvegardeDeNuit } from "./sauvegardeAuto";
 import { SAUVEGARDES_CONSERVEES } from "./config";
 import { contexteRequete } from "./tracabilite";
@@ -65,6 +66,9 @@ export function creerApp() {
 
       // --- Rappels : préférences, abonnements push, réglages d'envoi, flux d'agenda
       .use(routesRappels)
+
+      // --- Espace des enfants (code PIN) : leurs missions et leurs récompenses, rien d'autre
+      .use(routesEnfants)
 
       // --- Nouvelle version disponible ? (compte connecté)
       .get("/api/mise-a-jour", ({ utilisateur }) => {

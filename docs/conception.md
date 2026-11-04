@@ -85,7 +85,16 @@ les voitures, et les enfants à qui confier des choses. Décisions prises (novem
    échéance au temps, dans un an. Relevé demandé le 1er du mois, relancé le 4 si rien depuis le 1er ; la notification
    ouvre la saisie (`/elements/:id?releve=1`). Tableau de bord : les véhicules apparaissent sur « toutes les
    maisons ». Modèles : révision (15 000 km), courroie, liquide de frein, pneus. Pas d'assurance.
-4. Famille : profils **enfant** (16 et 13 ans ; la plus petite plus tard) connectés par code PIN, sur la tablette
-   partagée ou leur téléphone, qui ne voient que leurs missions ; missions attribuées ou à tour de rôle ; points
-   (10 par défaut, fixés par mission), validés par n'importe quel parent (automatiquement après 48 h) ; objectif
-   individuel par semaine ; récompenses définies par les parents. Ton sobre, pas enfantin.
+4. Famille (fait) : profils **enfant** (table `enfant`, migration 0005) connectés par **prénom et code PIN** (4 à 8
+   chiffres, haché ; 10 codes faux de suite bloquent le profil jusqu'à un nouveau code ; 10 échecs par IP en 15 min)
+   sur `/enfant`, avec un cookie à part (`custos_enfant`, sessions dans comptes.db) : 30 jours sur leur téléphone, ou
+   15 minutes sans rien faire (tablette partagée, prénoms retenus sur l'appareil). Un enfant n'a accès qu'à
+   `/api/enfant/*`, jamais aux fonctions RPC. **Mission** = une chose à faire avec des points (10 par défaut) et un ou
+   plusieurs enfants (`mission_tour`, dans l'ordre) : plusieurs = **à tour de rôle** (le tour avance à chaque
+   occurrence, faite ou passée, en sautant les profils désactivés). L'enfant coche « C'est fait » au plus deux jours
+   avant l'échéance, une fois par jour : réalisation à valider (`validation`, `points`, état d'avant gardé), push aux
+   parents. Validée par n'importe quel parent, d'office au bout de 48 h ; **refusée** : aucun point, la mission revient
+   comme avant si rien n'a été fait depuis. Un parent qui coche « Fait » ne donne de points à personne. Objectif de
+   points par semaine (du lundi au dimanche) ; **récompenses** définies par les parents, demandées par l'enfant (points
+   réservés), accordées ou refusées (les points reviennent). Page **Famille** (`/famille`, dans « Plus », pastille quand
+   quelque chose attend). Codes PIN masqués dans le journal. Ton sobre, pas enfantin.

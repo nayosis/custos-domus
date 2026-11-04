@@ -144,6 +144,9 @@ function FormConnexion() {
           </Stack>
         </form>
       </Paper>
+      <Anchor href="/enfant" size="sm">
+        Espace enfants (code PIN) →
+      </Anchor>
       <Signature />
       </Stack>
     </Center>

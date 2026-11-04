@@ -16,7 +16,7 @@ export class ErreurServeur extends Error {
 export const ID_CLIENT = Array.from(crypto.getRandomValues(new Uint8Array(16)), (o) => o.toString(16).padStart(2, "0")).join("");
 
 type Rappel = (e: ErreurServeur) => void;
-const PAGES_PUBLIQUES = ["/connexion", "/lien/"];
+const PAGES_PUBLIQUES = ["/connexion", "/lien/", "/enfant"];
 let surNonConnecte: Rappel = () => {
   if (PAGES_PUBLIQUES.some((p) => location.pathname.startsWith(p))) return;
   location.assign(`/connexion?retour=${encodeURIComponent(location.pathname + location.search)}`);

@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, index, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, index, primaryKey, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 /*
@@ -123,6 +123,12 @@ export const entretien = sqliteTable(
     intervalleKm: integer("intervalle_km"),
     kmEcheance: integer("km_echeance"),
     echeanceTemps: text("echeance_temps"),
+    /**
+     * Mission confiée aux enfants : points gagnés (vide : pas une mission), et l'enfant dont c'est le tour
+     * (ceux qui se la partagent, dans l'ordre, sont dans mission_tour).
+     */
+    points: integer("points"),
+    enfantId: text("enfant_id").references((): AnySQLiteColumn => enfant.id, { onDelete: "set null" }),
     creeLe: creeLe(),
     ...tracabilite(),
   },
@@ -150,6 +156,14 @@ export const realisation = sqliteTable(
     passee: integer("passee", { mode: "boolean" }).notNull().default(false),
     /** Véhicule : kilométrage au moment de l'intervention. */
     kilometrage: integer("kilometrage"),
+    /** Mission faite par un enfant : ses points, et leur validation (a_valider, validee, refusee). */
+    enfantId: text("enfant_id").references((): AnySQLiteColumn => enfant.id, { onDelete: "set null" }),
+    points: integer("points"),
+    validation: text("validation"),
+    validePar: text("valide_par"),
+    valideLe: text("valide_le"),
+    /** État de la mission avant (JSON) : remis en place si un parent refuse. */
+    avant: text("avant"),
     creeLe: creeLe(),
     ...tracabilite(),
   },
@@ -208,6 +222,69 @@ export const releve = sqliteTable(
   (t) => [index("releve_element_idx").on(t.elementId, t.date)],
 );
 
+/**
+ * Un enfant de la famille : il se connecte avec son prénom et un code PIN, et ne voit que ses missions.
+ * Après 10 codes faux de suite, il est bloqué jusqu'à ce qu'un parent lui donne un nouveau code.
+ */
+export const enfant = sqliteTable("enfant", {
+  id: id(),
+  prenom: text("prenom").notNull(),
+  pinHash: text("pin_hash").notNull(),
+  echecsPin: integer("echecs_pin").notNull().default(0),
+  /** Points visés chaque semaine (du lundi au dimanche). */
+  objectifSemaine: integer("objectif_semaine").notNull().default(50),
+  actif: integer("actif", { mode: "boolean" }).notNull().default(true),
+  creeLe: creeLe(),
+  ...tracabilite(),
+});
+
+/** Qui se partage une mission, et dans quel ordre (un seul enfant : mission attribuée ; plusieurs : à tour de rôle). */
+export const missionTour = sqliteTable(
+  "mission_tour",
+  {
+    entretienId: text("entretien_id")
+      .notNull()
+      .references(() => entretien.id, { onDelete: "cascade" }),
+    enfantId: text("enfant_id")
+      .notNull()
+      .references(() => enfant.id, { onDelete: "cascade" }),
+    ordre: integer("ordre").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.entretienId, t.enfantId] }), index("mission_tour_enfant_idx").on(t.enfantId)],
+);
+
+/** Récompense définie par les parents, échangeable contre des points. */
+export const recompense = sqliteTable("recompense", {
+  id: id(),
+  titre: text("titre").notNull(),
+  points: integer("points").notNull(),
+  actif: integer("actif", { mode: "boolean" }).notNull().default(true),
+  creeLe: creeLe(),
+  ...tracabilite(),
+});
+
+/** Demande d'un enfant : une récompense contre des points (demandee, accordee, refusee). */
+export const echange = sqliteTable(
+  "echange",
+  {
+    id: id(),
+    enfantId: text("enfant_id")
+      .notNull()
+      .references(() => enfant.id, { onDelete: "cascade" }),
+    recompenseId: text("recompense_id").references(() => recompense.id, { onDelete: "set null" }),
+    titre: text("titre").notNull(),
+    points: integer("points").notNull(),
+    statut: text("statut").notNull().default("demandee"),
+    reponduPar: text("repondu_par"),
+    reponduLe: text("repondu_le"),
+    creeLe: creeLe(),
+  },
+  (t) => [index("echange_enfant_idx").on(t.enfantId)],
+);
+
+export type Enfant = typeof enfant.$inferSelect;
+export type Recompense = typeof recompense.$inferSelect;
+export type Echange = typeof echange.$inferSelect;
 export type Maison = typeof maison.$inferSelect;
 export type Prestataire = typeof prestataire.$inferSelect;
 export type Element = typeof element.$inferSelect;

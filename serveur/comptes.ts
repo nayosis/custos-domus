@@ -64,6 +64,13 @@ export function ouvrirComptes(chemin: string) {
       push INTEGER NOT NULL DEFAULT 1,
       jeton_ical TEXT UNIQUE
     );
+    -- Sessions des enfants (connexion par code PIN ; les profils sont dans la base de données).
+    CREATE TABLE IF NOT EXISTS session_enfant (
+      jeton_hash TEXT PRIMARY KEY,
+      enfant_id TEXT NOT NULL,
+      expire_le INTEGER NOT NULL,
+      souvenir INTEGER NOT NULL DEFAULT 0
+    );
     -- Appareils abonnés aux notifications (un par navigateur ou téléphone).
     CREATE TABLE IF NOT EXISTS abonnement_push (
       endpoint TEXT PRIMARY KEY,
@@ -291,3 +298,31 @@ export async function utiliserLien(jeton: string, mdp: string) {
   supprimerSessions(l.utilisateur.id);
   return l.utilisateur;
 }
+
+// --- Sessions des enfants : « rester connecté » (son téléphone, 30 jours) ou 15 minutes sans rien faire (tablette partagée)
+
+export const DUREE_SESSION_ENFANT_INACTIVE_MS = 15 * 60 * 1000;
+
+export function creerSessionEnfant(enfantId: string, souvenir: boolean) {
+  const jeton = nouveauJeton();
+  base.query("DELETE FROM session_enfant WHERE expire_le < ?").run(Date.now());
+  base
+    .query("INSERT INTO session_enfant (jeton_hash, enfant_id, expire_le, souvenir) VALUES (?, ?, ?, ?)")
+    .run(hacherJeton(jeton), enfantId, Date.now() + (souvenir ? DUREE_SESSION_LONGUE_MS : DUREE_SESSION_ENFANT_INACTIVE_MS), souvenir ? 1 : 0);
+  return jeton;
+}
+
+/** Enfant de la session (non expirée), ou null ; chaque usage la prolonge. */
+export function lireSessionEnfant(jeton: string | undefined) {
+  if (!jeton) return null;
+  const h = hacherJeton(jeton);
+  const s = base
+    .query<{ enfant_id: string; expire_le: number; souvenir: number }, [string]>("SELECT enfant_id, expire_le, souvenir FROM session_enfant WHERE jeton_hash = ?")
+    .get(h);
+  if (!s || s.expire_le < Date.now()) return null;
+  base.query("UPDATE session_enfant SET expire_le = ? WHERE jeton_hash = ?").run(Date.now() + (s.souvenir ? DUREE_SESSION_LONGUE_MS : DUREE_SESSION_ENFANT_INACTIVE_MS), h);
+  return s.enfant_id;
+}
+
+export const supprimerSessionEnfant = (jeton: string) => base.query("DELETE FROM session_enfant WHERE jeton_hash = ?").run(hacherJeton(jeton));
+export const supprimerSessionsEnfant = (enfantId: string) => base.query("DELETE FROM session_enfant WHERE enfant_id = ?").run(enfantId);
