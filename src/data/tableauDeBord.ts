@@ -8,7 +8,7 @@ import { ajouter } from "../lib/entretiens";
  * Tout ce que montre le tableau de bord, pour une maison ou pour toutes (maisons et éléments archivés exclus) :
  * - les entretiens actifs (classés côté interface : en retard, à prévoir, rendez-vous, à venir) ;
  * - les garanties qui expirent dans les 3 mois (ou ont expiré depuis moins d'un mois) ;
- * - les dernières interventions ;
+ * - les dernières interventions (les échéances passées volontairement n'en sont pas) ;
  * - les dépenses de l'année (entretiens et réparations, achats d'éléments), avec l'année précédente.
  */
 export async function tableauDeBord(maisonId?: string | null) {
@@ -39,7 +39,7 @@ export async function tableauDeBord(maisonId?: string | null) {
       .innerJoin(maison, eq(maison.id, element.maisonId))
       .leftJoin(prestataire, eq(prestataire.id, realisation.prestataireId))
       // L'historique d'un élément archivé (remplacé, vendu) compte encore : on ne filtre que les maisons.
-      .where(and(eq(maison.archivee, false), maisonId ? eq(maison.id, maisonId) : undefined))
+      .where(and(eq(maison.archivee, false), eq(realisation.passee, false), maisonId ? eq(maison.id, maisonId) : undefined))
       .orderBy(desc(realisation.date), desc(realisation.creeLe))
       .limit(6),
     db

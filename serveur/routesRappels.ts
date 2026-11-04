@@ -11,7 +11,7 @@ import { genererIcal } from "./ical";
 import { calculerRappels, composer } from "./rappels";
 import {
   abonnementsDe, abonner, clesVapid, configEnvoi, configEnvoiPublique, desabonner, enregistrerConfigEnvoi, envoiEmailPossible, majPreferences, preferences,
-  regenererJetonIcal, utilisateurDuJetonIcal,
+  jetonIcalFamille, regenererJetonIcal, regenererJetonIcalFamille, utilisateurDuJetonIcal,
 } from "./reglages";
 
 /** Ce que voit un compte sur sa page Notifications. */
@@ -20,7 +20,7 @@ function etat(utilisateurId: string) {
   return {
     email: { actif: p.email, possible: envoiEmailPossible() },
     push: { actif: p.push, clePublique: clesVapid().publicKey, appareils: abonnementsDe(utilisateurId).map((a) => ({ endpoint: a.endpoint, appareil: a.appareil })) },
-    ical: { chemin: `/api/ical/${p.jetonIcal}.ics` },
+    ical: { chemin: `/api/ical/${p.jetonIcal}.ics`, famille: `/api/ical/${jetonIcalFamille()}.ics` },
   };
 }
 
@@ -62,6 +62,11 @@ export const routesRappels = new Elysia()
   .post("/api/notifications/ical", ({ utilisateur }) => {
     const u = exiger(utilisateur, "ecriture");
     regenererJetonIcal(u.id);
+    return etat(u.id);
+  })
+  .post("/api/notifications/ical-famille", ({ utilisateur }) => {
+    const u = exiger(utilisateur, "admin");
+    regenererJetonIcalFamille();
     return etat(u.id);
   })
   .post(
@@ -129,9 +134,10 @@ export const routesRappels = new Elysia()
 
   // --- Flux d'agenda : public, le lien secret tient lieu de connexion
   .get("/api/ical/:fichier", async ({ params, set }) => {
-    const id = utilisateurDuJetonIcal(params.fichier.replace(/\.ics$/, ""));
-    if (!id) throw new ErreurMetier("Agenda introuvable", 404);
+    const jeton = params.fichier.replace(/\.ics$/, "");
+    const famille = jeton === jetonIcalFamille();
+    if (!famille && !utilisateurDuJetonIcal(jeton)) throw new ErreurMetier("Agenda introuvable", 404);
     set.headers["content-type"] = "text/calendar; charset=utf-8";
     set.headers["cache-control"] = "private, max-age=900";
-    return genererIcal();
+    return genererIcal(new Date(), { famille });
   });

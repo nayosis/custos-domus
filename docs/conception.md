@@ -54,7 +54,28 @@ Modèle d'entretien ── bibliothèque appliquée en un clic à un élément
 4. Tableau de bord (fait) : retard, à prévoir, rendez-vous, prochainement (3 mois), garanties, dernières interventions, dépenses de l'année ; filtre maison.
 5. Rappels (fait) : tournée quotidienne à 8 h (jours manqués rattrapés, une semaine au plus), e-mail (Mailjet ou SMTP, réglé par un admin), push PWA (service worker `public/sw.js`, clés VAPID créées au premier besoin), flux iCal par lien secret. Réglages et préférences dans comptes.db.
 6. Sauvegarde automatique (fait) : chaque nuit à partir de 3 h dans `data/sauvegardes` (14 conservées, `CUSTOS_SAUVEGARDES_CONSERVEES`), même ZIP que la sauvegarde téléchargée ; liste, téléchargement et restauration depuis la page Sauvegarde ; fichiers orphelins effacés au bout de 7 jours.
-7. Publication : dépôt `nayosis/custos-domus`, image ghcr.io, déploiement sur Pikachu.
+7. Publication (fait) : dépôt `nayosis/custos-domus`, image ghcr.io, déploiement sur Pikachu (`maison.nayosis.wedogeek.xyz`).
 
 V2 : ntfy, OCR facultatif des factures (désactivé par défaut : les documents sortiraient du serveur), mesures
 structurées (relevés de la PAC), entretiens conditionnels ou saisonniers.
+
+## Au-delà de l'entretien (après la V1)
+
+Les demandes après la mise en service dépassent « l'entretien d'un élément » : sortir les poubelles (une routine),
+les voitures, et les enfants à qui confier des choses. Décisions prises (novembre 2026) :
+
+1. Petites briques (fait) : intervalle en **semaines** ; **passer cette fois** (réalisation `passee`, motif dans la
+   note, hors dépenses et dernières interventions ; la suivante part de l'échéance passée, sans laisser d'échéances
+   dépassées) ; **reporter** une seule échéance (`echeance_initiale` garde la date d'origine : le rythme ne glisse
+   pas) ; **heure et durée** des rendez-vous (facultatives ; créneau UTC et alarme 1 h avant dans l'agenda) ;
+   **lien d'agenda de la famille** (un seul, réglage `jeton_ical_famille`, régénéré par un admin).
+2. « À faire » et routines : menu « Entretiens » renommé « À faire » ; une chose à faire peut être rattachée à la
+   maison sans élément ; type **routine** (ni coût ni prestataire, « fait » ou « passé », chaque « fait » compte pour
+   le jeu). Les poubelles se notent la veille de la collecte : pas d'heure de rappel spécifique.
+3. Véhicules : rubrique à part (fiche, immatriculation, kilométrage) ; intervention rapide (moi ou un garage, prix
+   approximatif, km, photo de facture) ; **relevé du compteur** demandé le 1er du mois (relance 3 jours après) ;
+   entretiens au kilométrage « ou au temps, au premier atteint », date estimée d'après les relevés. Pas d'assurance.
+4. Famille : profils **enfant** (16 et 13 ans ; la plus petite plus tard) connectés par code PIN, sur la tablette
+   partagée ou leur téléphone, qui ne voient que leurs missions ; missions attribuées ou à tour de rôle ; points
+   (10 par défaut, fixés par mission), validés par n'importe quel parent (automatiquement après 48 h) ; objectif
+   individuel par semaine ; récompenses définies par les parents. Ton sobre, pas enfantin.

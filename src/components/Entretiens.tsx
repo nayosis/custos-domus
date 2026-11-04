@@ -3,15 +3,18 @@ import {
   ActionIcon, Alert, Badge, Box, Button, Card, Collapse, Group, Menu, Modal, NumberInput, Radio, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Textarea, Title, UnstyledButton,
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
+import { TimeInput } from "@mantine/dates";
 import {
-  IconCalendarCheck, IconCalendarEvent, IconCalendarX, IconCheck, IconChevronDown, IconChevronRight, IconDots, IconPlayerPause, IconPlayerPlay, IconPencil, IconPlus, IconRepeat, IconTool, IconTrash,
+  IconCalendarCheck, IconCalendarEvent, IconCalendarX, IconCheck, IconChevronDown, IconChevronRight, IconClockPause, IconDots, IconPlayerPause, IconPlayerPlay,
+  IconPlayerSkipForward, IconPencil, IconPlus, IconRepeat, IconTool, IconTrash,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
-import { annulerRdv, creerEntretien, listeModeles, majEntretien, prendreRdv, supprimerEntretien } from "../data/entretiens";
+import { annulerRdv, creerEntretien, listeModeles, majEntretien, passerEcheance, prendreRdv, reporterEcheance, supprimerEntretien } from "../data/entretiens";
 import type { Entretien, ModeleEntretien } from "../db/schema";
 import { aujourdhui, dateLisible, duree } from "../lib/dates";
 import {
-  ajouter, DELAI_DEFAUT, estRecurrent, libelleDelai, libelleIntervalle, NATURES, situation, type Nature, type Situation, type Unite,
+  ajouter, DELAI_DEFAUT, DUREES_RDV, echeanceApresPassage, estRecurrent, libelleDelai, libelleDuree, libelleHeure, libelleIntervalle, NATURES, situation, type Nature,
+  type Situation, type Unite,
 } from "../lib/entretiens";
 import { ecrire } from "../lib/query";
 import { ChampDate, ChampPrestataire } from "./Champs";
@@ -20,7 +23,7 @@ import { ModalRealisation } from "./ModalRealisation";
 export type LigneEntretien = Entretien & { prestataireNom: string | null };
 
 /** Badge d'état : en retard (rouge), à prévoir (orange), rendez-vous pris (bleu), à venir (gris). */
-export function BadgeSituation({ e, s }: { e: Pick<Entretien, "nature" | "echeance">; s: Situation }) {
+export function BadgeSituation({ e, s }: { e: Pick<Entretien, "nature" | "echeance"> & { heureRdv?: string | null }; s: Situation }) {
   const style = { textTransform: "none", flexShrink: 0 } as const;
   switch (s.etat) {
     case "en_retard":
@@ -38,7 +41,9 @@ export function BadgeSituation({ e, s }: { e: Pick<Entretien, "nature" | "echean
     case "rdv_pris":
       return (
         <Badge color="blue" variant="light" style={style} leftSection={<IconCalendarCheck size={12} />}>
-          {s.dateRdv ? `RDV ${s.jours === 0 ? "aujourd'hui" : s.jours === 1 ? "demain" : `le ${dateLisible(s.dateRdv, { day: "numeric", month: "short" })}`}` : "RDV pris"}
+          {s.dateRdv
+            ? `RDV ${s.jours === 0 ? "aujourd'hui" : s.jours === 1 ? "demain" : `le ${dateLisible(s.dateRdv, { day: "numeric", month: "short" })}`}${e.heureRdv ? ` ${libelleHeure(e.heureRdv)}` : ""}`
+            : "RDV pris"}
         </Badge>
       );
     case "a_venir":
@@ -217,11 +222,19 @@ function ModalEntretien({ elementId, categorie, entretien, opened, onClose }: { 
         {v.periodique && (
           <>
             <Group grow align="flex-end">
-              <NumberInput label="Tous les" min={1} max={1000} allowDecimal={false} value={v.intervalleValeur} onChange={(x) => maj({ intervalleValeur: x })} />
+              <NumberInput
+                label={v.intervalleUnite === "semaine" ? "Toutes les" : "Tous les"}
+                min={1}
+                max={1000}
+                allowDecimal={false}
+                value={v.intervalleValeur}
+                onChange={(x) => maj({ intervalleValeur: x })}
+              />
               <Select
                 aria-label="Unité"
                 data={[
                   { value: "jour", label: "jours" },
+                  { value: "semaine", label: valeur > 1 ? "semaines" : "semaine" },
                   { value: "mois", label: "mois" },
                   { value: "an", label: valeur > 1 ? "ans" : "an" },
                 ]}
@@ -270,24 +283,47 @@ function ModalEntretien({ elementId, categorie, entretien, opened, onClose }: { 
   );
 }
 
-/** Rendez-vous pris : date (facultative si pas encore fixée) et prestataire. */
+/** Rendez-vous pris : date (facultative si pas encore fixée), heure et durée (facultatives), prestataire. */
 export function ModalRdv({ entretien, onClose }: { entretien: LigneEntretien | null; onClose: () => void }) {
   const [dateRdv, setDateRdv] = useState<string | null>(null);
+  const [heure, setHeure] = useState("");
+  const [duree, setDuree] = useState("60");
   const [prestataireId, setPrestataireId] = useState<string | null>(null);
   const [cle, setCle] = useState<string | null>(null);
   if ((entretien?.id ?? null) !== cle) {
     setCle(entretien?.id ?? null);
     setDateRdv(entretien?.dateRdv ?? null);
+    setHeure(entretien?.heureRdv ?? "");
+    setDuree(String(entretien?.dureeRdvMinutes ?? 60));
     setPrestataireId(entretien?.prestataireId ?? null);
   }
+  const avecHeure = !!dateRdv && !!heure;
   return (
     <Modal opened={!!entretien} onClose={onClose} title={entretien ? `Rendez-vous pris : ${entretien.titre}` : ""}>
       <Stack>
         <ChampPrestataire value={prestataireId} onChange={setPrestataireId} />
         <ChampDate label="Date du rendez-vous" description="Vous serez prévenu la veille." value={dateRdv} onChange={setDateRdv} data-autofocus />
+        {dateRdv && (
+          <Group grow align="flex-start">
+            <TimeInput label="Heure" description="Facultative" value={heure} onChange={(e) => setHeure(e.currentTarget.value)} />
+            <Select
+              label="Durée"
+              description={avecHeure ? libelleHeure(heure, Number(duree)) : " "}
+              data={DUREES_RDV.map((m) => ({ value: String(m), label: libelleDuree(m) }))}
+              value={duree}
+              onChange={(d) => d && setDuree(d)}
+              allowDeselect={false}
+              disabled={!heure}
+            />
+          </Group>
+        )}
+        <Text size="xs" c="dimmed">
+          {avecHeure ? "Dans l'agenda : un créneau, avec une alarme une heure avant." : "Sans heure : la journée entière dans l'agenda."}
+        </Text>
         <Button
           onClick={async () => {
-            if ((await ecrire(() => prendreRdv(entretien!.id, { dateRdv, prestataireId }))) !== undefined) onClose();
+            const v = { dateRdv, heureRdv: avecHeure ? heure : null, dureeRdvMinutes: avecHeure ? Number(duree) : null, prestataireId };
+            if ((await ecrire(() => prendreRdv(entretien!.id, v))) !== undefined) onClose();
           }}
         >
           Enregistrer
@@ -297,7 +333,59 @@ export function ModalRdv({ entretien, onClose }: { entretien: LigneEntretien | n
   );
 }
 
-function Ligne({ e, onModifier, onRdv, onFait }: { e: LigneEntretien; onModifier: () => void; onRdv: () => void; onFait: () => void }) {
+/**
+ * Passer cette fois (l'occurrence est sautée, notée « passée » dans l'historique) ou reporter cette échéance
+ * à une autre date (le rythme ne bouge pas).
+ */
+export function ModalEcheance({ cible, onClose }: { cible: { e: LigneEntretien; mode: "passer" | "reporter" } | null; onClose: () => void }) {
+  const [motif, setMotif] = useState("");
+  const [date, setDate] = useState<string | null>(null);
+  const [cle, setCle] = useState<string | null>(null);
+  const ouverture = cible ? `${cible.e.id}-${cible.mode}` : null;
+  if (ouverture !== cle) {
+    setCle(ouverture);
+    setMotif("");
+    setDate(null);
+  }
+  if (!cible) return <Modal opened={false} onClose={onClose} />;
+  const { e, mode } = cible;
+  const origine = e.echeanceInitiale ?? e.echeance;
+  const suivante = echeanceApresPassage(e, aujourdhui());
+  const valider = async () => {
+    const r = await ecrire<unknown>(() => (mode === "passer" ? passerEcheance(e.id, { motif }) : reporterEcheance(e.id, { date: date! })));
+    if (r !== undefined) onClose();
+  };
+  return (
+    <Modal opened onClose={onClose} title={mode === "passer" ? `Passer cette fois : ${e.titre}` : `Reporter : ${e.titre}`}>
+      <Stack>
+        {mode === "passer" ? (
+          <>
+            <Text size="sm">
+              L'échéance du {dateLisible(origine)} est notée « passée » dans l'historique : ni faite, ni comptée dans les dépenses.{" "}
+              {suivante ? `Prochaine échéance : ${dateLisible(suivante)}.` : "C'était une action ponctuelle : elle sera close."}
+              {e.etat === "rdv_pris" && " Le rendez-vous en cours est annulé."}
+            </Text>
+            <Textarea label="Motif" description="Facultatif" placeholder="Haie peu poussée cette année, absents…" autosize minRows={2} value={motif} onChange={(x) => setMotif(x.currentTarget.value)} data-autofocus />
+          </>
+        ) : (
+          <>
+            <Text size="sm">
+              Seule cette échéance bouge{e.ancrage === "fixe" && estRecurrent(e) ? ` : la suivante reste calculée depuis le ${dateLisible(origine)}` : ""}.
+            </Text>
+            <ChampDate label="Nouvelle date" required value={date} onChange={setDate} data-autofocus />
+          </>
+        )}
+        <Button onClick={valider} disabled={mode === "reporter" && !date} leftSection={mode === "passer" ? <IconPlayerSkipForward size={16} /> : <IconClockPause size={16} />}>
+          {mode === "passer" ? "Passer cette fois" : "Reporter"}
+        </Button>
+      </Stack>
+    </Modal>
+  );
+}
+
+function Ligne({
+  e, onModifier, onRdv, onFait, onEcheance,
+}: { e: LigneEntretien; onModifier: () => void; onRdv: () => void; onFait: () => void; onEcheance: (mode: "passer" | "reporter") => void }) {
   const s = situation(e, aujourdhui());
   const Icone = e.nature === "rdv" ? IconCalendarEvent : IconTool;
   const aPrendre = e.actif && e.nature === "rdv" && e.etat !== "rdv_pris";
@@ -313,7 +401,7 @@ function Ligne({ e, onModifier, onRdv, onFait }: { e: LigneEntretien; onModifier
     });
   const details = [
     e.actif && estRecurrent(e) ? libelleIntervalle(e) : null,
-    e.actif ? `échéance ${dateLisible(e.echeance)}` : null,
+    e.actif ? `échéance ${dateLisible(e.echeance)}${e.echeanceInitiale ? ` (reportée, prévue le ${dateLisible(e.echeanceInitiale)})` : ""}` : null,
     e.prestataireNom,
   ].filter(Boolean);
 
@@ -369,6 +457,17 @@ function Ligne({ e, onModifier, onRdv, onFait }: { e: LigneEntretien; onModifier
               </Menu.Item>
             </>
           )}
+          {e.actif && (
+            <>
+              <Menu.Item leftSection={<IconClockPause size={14} />} onClick={() => onEcheance("reporter")}>
+                Reporter à…
+              </Menu.Item>
+              <Menu.Item leftSection={<IconPlayerSkipForward size={14} />} onClick={() => onEcheance("passer")}>
+                Passer cette fois…
+              </Menu.Item>
+              <Menu.Divider />
+            </>
+          )}
           <Menu.Item leftSection={<IconPencil size={14} />} onClick={onModifier}>
             Modifier
           </Menu.Item>
@@ -393,11 +492,19 @@ export function Entretiens({ elementId, categorie, entretiens, archive }: { elem
   const [edition, setEdition] = useState<{ entretien: Entretien | null } | null>(null);
   const [rdv, setRdv] = useState<LigneEntretien | null>(null);
   const [fait, setFait] = useState<LigneEntretien | null>(null);
+  const [echeance, setEcheance] = useState<{ e: LigneEntretien; mode: "passer" | "reporter" } | null>(null);
   const [voirInactifs, setVoirInactifs] = useState(false);
   const actifs = entretiens.filter((e) => e.actif);
   const inactifs = entretiens.filter((e) => !e.actif);
   const ligne = (e: LigneEntretien) => (
-    <Ligne key={e.id} e={e} onModifier={() => setEdition({ entretien: e })} onRdv={() => setRdv(e)} onFait={() => setFait(e)} />
+    <Ligne
+      key={e.id}
+      e={e}
+      onModifier={() => setEdition({ entretien: e })}
+      onRdv={() => setRdv(e)}
+      onFait={() => setFait(e)}
+      onEcheance={(mode) => setEcheance({ e, mode })}
+    />
   );
 
   return (
@@ -436,6 +543,7 @@ export function Entretiens({ elementId, categorie, entretiens, archive }: { elem
 
       <ModalEntretien elementId={elementId} categorie={categorie} entretien={edition?.entretien ?? null} opened={!!edition} onClose={() => setEdition(null)} />
       <ModalRdv entretien={rdv} onClose={() => setRdv(null)} />
+      <ModalEcheance cible={echeance} onClose={() => setEcheance(null)} />
       <ModalRealisation elementId={elementId} cible={fait ? { mode: "entretien", entretien: fait } : null} onClose={() => setFait(null)} />
     </Card>
   );

@@ -91,16 +91,21 @@ export const entretien = sqliteTable(
     /** tache, rdv */
     nature: text("nature").notNull().default("tache"),
     intervalleValeur: integer("intervalle_valeur"),
-    /** jour, mois, an */
+    /** jour, semaine, mois, an */
     intervalleUnite: text("intervalle_unite"),
     /** realisation : prochaine = date réalisée + intervalle ; fixe : prochaine = échéance précédente + intervalle. */
     ancrage: text("ancrage").notNull().default("realisation"),
     echeance: text("echeance").notNull(),
+    /** Échéance reportée : sa date d'origine, d'où repart le rythme (vide sinon). */
+    echeanceInitiale: text("echeance_initiale"),
     /** Combien de jours avant l'échéance on est prévenu. */
     delaiAlerteJours: integer("delai_alerte_jours").notNull(),
     /** a_faire, rdv_pris */
     etat: text("etat").notNull().default("a_faire"),
     dateRdv: text("date_rdv"),
+    /** Heure du rendez-vous « HH:MM » (vide : journée entière) et durée en minutes. */
+    heureRdv: text("heure_rdv"),
+    dureeRdvMinutes: integer("duree_rdv_minutes"),
     prestataireId: text("prestataire_id").references(() => prestataire.id, { onDelete: "set null" }),
     notes: text("notes"),
     actif: integer("actif", { mode: "boolean" }).notNull().default(true),
@@ -125,6 +130,8 @@ export const realisation = sqliteTable(
     note: text("note"),
     cout: real("cout"),
     prestataireId: text("prestataire_id").references(() => prestataire.id, { onDelete: "set null" }),
+    /** Occurrence passée (sautée) volontairement : ni dépense ni statistique ; la note porte le motif. */
+    passee: integer("passee", { mode: "boolean" }).notNull().default(false),
     creeLe: creeLe(),
     ...tracabilite(),
   },

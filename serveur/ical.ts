@@ -1,9 +1,12 @@
 /*
  * Flux d'agenda (iCalendar, lecture seule) : on s'y abonne depuis Google Agenda, Apple Calendrier, Thunderbird…
- * Événements sur la journée entière : échéances, moment de prendre rendez-vous, rendez-vous pris, fins de garantie.
+ * Événements sur la journée entière (échéances, moment de prendre rendez-vous, fins de garantie), sauf les
+ * rendez-vous pris avec une heure : un vrai créneau, avec une alarme une heure avant.
+ * Le même contenu sert aux liens personnels et au lien de la famille (agenda partagé).
  */
 import { dateLisible } from "../src/lib/dates";
 import { ajouter } from "../src/lib/entretiens";
+import { FUSEAU } from "./config";
 import { chargerSuivi } from "./rappels";
 
 /** Échappement des textes (RFC 5545 §3.3.11). */
@@ -27,18 +30,47 @@ function plier(ligne: string) {
   return morceaux.join("\r\n ");
 }
 
+const alarme = (resume: string, declencheur: string) => ["BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${texte(resume)}`, `TRIGGER:${declencheur}`, "END:VALARM"];
 const jourIcal = (d: string) => d.replace(/-/g, "");
+const instantIcal = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
 
-type Evenement = { uid: string; jour: string; resume: string; description?: string; rappelVeille?: boolean };
+/** Écart (ms) entre l'heure locale du fuseau et l'heure UTC, à cet instant. */
+function decalage(d: Date, fuseau: string) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", { timeZone: fuseau, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })
+      .formatToParts(d)
+      .map((x) => [x.type, Number(x.value)]),
+  );
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(d.getTime() / 1000) * 1000;
+}
 
-export async function genererIcal(maintenant = new Date()) {
+/** « 2026-11-20 » à « 14:00 », heure du fuseau de l'installation → instant UTC (changements d'heure compris). */
+export function instantLocal(jour: string, heure: string, fuseau = FUSEAU) {
+  const [a, m, j] = jour.split("-").map(Number);
+  const [h, mn] = heure.split(":").map(Number);
+  const naif = Date.UTC(a, m - 1, j, h, mn);
+  let t = naif - decalage(new Date(naif), fuseau);
+  t = naif - decalage(new Date(t), fuseau);
+  return new Date(t);
+}
+
+type Evenement = { uid: string; jour: string; resume: string; description?: string; rappelVeille?: boolean; creneau?: { debut: Date; fin: Date } };
+
+export async function genererIcal(maintenant = new Date(), { famille = false } = {}) {
   const { entretiens, garanties } = await chargerSuivi();
   const evenements: Evenement[] = [];
   for (const e of entretiens) {
     const ou = `${e.elementNom} (${e.maisonNom})`;
     const contact = e.prestataireNom ? `\nPrestataire : ${e.prestataireNom}${e.prestataireTelephone ? `, ${e.prestataireTelephone}` : ""}` : "";
     if (e.etat === "rdv_pris" && e.dateRdv) {
-      evenements.push({ uid: `rdv-${e.id}`, jour: e.dateRdv, resume: `RDV : ${e.titre} – ${e.elementNom}`, description: `${ou}${contact}`, rappelVeille: true });
+      const debut = e.heureRdv ? instantLocal(e.dateRdv, e.heureRdv) : null;
+      evenements.push({
+        uid: `rdv-${e.id}`,
+        jour: e.dateRdv,
+        resume: `RDV : ${e.titre} – ${e.elementNom}`,
+        description: `${ou}${contact}`,
+        ...(debut ? { creneau: { debut, fin: new Date(debut.getTime() + (e.dureeRdvMinutes ?? 60) * 60_000) } } : { rappelVeille: true }),
+      });
       continue;
     }
     if (e.nature === "rdv" && e.etat !== "rdv_pris" && e.delaiAlerteJours > 0)
@@ -60,14 +92,14 @@ export async function genererIcal(maintenant = new Date()) {
   for (const g of garanties.filter((x) => x.finGarantie >= ilYAUnAn))
     evenements.push({ uid: `garantie-${g.id}`, jour: g.finGarantie, resume: `Fin de garantie : ${g.nom}`, description: g.maisonNom });
 
-  const horodatage = maintenant.toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
+  const horodatage = instantIcal(maintenant);
   const lignes = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
     "PRODID:-//Custos Domus//Rappels//FR",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    "X-WR-CALNAME:Custos Domus",
+    `X-WR-CALNAME:${famille ? "Custos Domus – famille" : "Custos Domus"}`,
     "X-WR-CALDESC:Entretiens\\, rendez-vous et garanties de vos maisons",
     "REFRESH-INTERVAL;VALUE=DURATION:PT6H",
     "X-PUBLISHED-TTL:PT6H",
@@ -77,13 +109,15 @@ export async function genererIcal(maintenant = new Date()) {
       "BEGIN:VEVENT",
       `UID:${ev.uid}@custos-domus`,
       `DTSTAMP:${horodatage}`,
-      `DTSTART;VALUE=DATE:${jourIcal(ev.jour)}`,
-      `DTEND;VALUE=DATE:${jourIcal(ajouter(ev.jour, 1, "jour"))}`,
+      ...(ev.creneau
+        ? [`DTSTART:${instantIcal(ev.creneau.debut)}`, `DTEND:${instantIcal(ev.creneau.fin)}`]
+        : [`DTSTART;VALUE=DATE:${jourIcal(ev.jour)}`, `DTEND;VALUE=DATE:${jourIcal(ajouter(ev.jour, 1, "jour"))}`]),
       `SUMMARY:${texte(ev.resume)}`,
       ...(ev.description ? [`DESCRIPTION:${texte(ev.description)}`] : []),
-      "TRANSP:TRANSPARENT",
-      // Rendez-vous : alarme la veille à 18 h (6 h avant le début de la journée).
-      ...(ev.rappelVeille ? ["BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${texte(ev.resume)}`, "TRIGGER:-PT6H", "END:VALARM"] : []),
+      // Un créneau occupe l'agenda ; une journée entière reste « disponible ».
+      ev.creneau ? "TRANSP:OPAQUE" : "TRANSP:TRANSPARENT",
+      // Rendez-vous : alarme une heure avant le créneau ; sans heure, la veille à 18 h (6 h avant le début de la journée).
+      ...(ev.creneau ? alarme(ev.resume, "-PT1H") : ev.rappelVeille ? alarme(ev.resume, "-PT6H") : []),
       "END:VEVENT",
     );
   }

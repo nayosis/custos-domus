@@ -13,7 +13,7 @@ import { estAdmin, utilisateur } from "../lib/session";
 type Etat = {
   email: { actif: boolean; possible: boolean };
   push: { actif: boolean; clePublique: string; appareils: { endpoint: string; appareil: string | null }[] };
-  ical: { chemin: string };
+  ical: { chemin: string; famille: string };
 };
 
 type ConfigEnvoi = {
@@ -190,14 +190,20 @@ function Telephone({ etat, appliquer }: { etat: Etat; appliquer: (a: () => Promi
 }
 
 function Agenda({ etat, appliquer }: { etat: Etat; appliquer: (a: () => Promise<unknown>) => Promise<void> }) {
-  const url = `${location.origin}${etat.ical.chemin}`;
+  const [quel, setQuel] = useState<"perso" | "famille">("perso");
+  const famille = quel === "famille";
+  const url = `${location.origin}${famille ? etat.ical.famille : etat.ical.chemin}`;
   const webcal = url.replace(/^https?:/, "webcal:");
   const changer = () =>
     modals.openConfirmModal({
-      title: "Changer le lien de l'agenda ?",
-      children: <Text size="sm">L'ancien lien cessera de fonctionner : il faudra se réabonner dans votre agenda avec le nouveau.</Text>,
+      title: famille ? "Changer le lien de l'agenda de la famille ?" : "Changer le lien de l'agenda ?",
+      children: (
+        <Text size="sm">
+          L'ancien lien cessera de fonctionner : il faudra {famille ? "réabonner l'agenda partagé" : "se réabonner dans votre agenda"} avec le nouveau.
+        </Text>
+      ),
       labels: { confirm: "Changer le lien", cancel: "Annuler" },
-      onConfirm: () => appliquer(() => appelApi("/api/notifications/ical", { methode: "POST", corps: {} })),
+      onConfirm: () => appliquer(() => appelApi(famille ? "/api/notifications/ical-famille" : "/api/notifications/ical", { methode: "POST", corps: {} })),
     });
   return (
     <Card withBorder>
@@ -206,9 +212,20 @@ function Agenda({ etat, appliquer }: { etat: Etat; appliquer: (a: () => Promise<
         <Title order={4}>Dans votre agenda</Title>
       </Group>
       <Stack gap="sm">
+        <SegmentedControl
+          value={quel}
+          onChange={(q) => setQuel(q as typeof quel)}
+          data={[
+            { value: "perso", label: "Mon agenda" },
+            { value: "famille", label: "Agenda de la famille" },
+          ]}
+        />
         <Text size="sm" c="dimmed">
-          Échéances, moment de prendre rendez-vous, rendez-vous pris (avec alarme la veille) et fins de garantie, dans Google Agenda, Calendrier d'Apple, Outlook… Le lien est
-          personnel : ne le partagez pas.
+          Échéances, moment de prendre rendez-vous, rendez-vous pris (en créneau s'ils ont une heure, avec alarme) et fins de garantie, dans Google Agenda, Calendrier d'Apple,
+          Outlook…{" "}
+          {famille
+            ? "Un seul lien pour toute la famille : ajoutez-le à l'agenda que vous partagez, il y apparaît pour tout le monde."
+            : "Le lien est personnel : ne le partagez pas."}
         </Text>
         <TextInput
           readOnly
@@ -241,9 +258,11 @@ function Agenda({ etat, appliquer }: { etat: Etat; appliquer: (a: () => Promise<
           >
             Google Agenda
           </Button>
-          <Button size="xs" variant="subtle" color="gray" leftSection={<IconRefresh size={14} />} onClick={changer}>
-            Changer le lien
-          </Button>
+          {(!famille || estAdmin()) && (
+            <Button size="xs" variant="subtle" color="gray" leftSection={<IconRefresh size={14} />} onClick={changer}>
+              Changer le lien
+            </Button>
+          )}
         </Group>
         <Text size="xs" c="dimmed">
           Google Agenda doit pouvoir joindre l'application depuis Internet ; les agendas se mettent à jour d'eux-mêmes (de quelques heures à une journée selon le service).

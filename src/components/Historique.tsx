@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ActionIcon, Anchor, Badge, Button, Card, Group, Menu, Stack, Text, Timeline, Title } from "@mantine/core";
 import { modals } from "@mantine/modals";
-import { IconCheck, IconDots, IconHistory, IconPaperclip, IconPencil, IconPlus, IconTool, IconTrash } from "@tabler/icons-react";
+import { IconCheck, IconDots, IconHistory, IconPaperclip, IconPencil, IconPlayerSkipForward, IconPlus, IconTool, IconTrash } from "@tabler/icons-react";
 import { supprimerRealisation } from "../data/realisations";
 import type { Document, Realisation } from "../db/schema";
 import { dateLisible, euros } from "../lib/dates";
@@ -11,7 +11,10 @@ import { ModalRealisation, type Cible } from "./ModalRealisation";
 
 export type LigneHistorique = Realisation & { prestataireNom: string | null; documents: Document[] };
 
-/** Ce qui a été fait sur l'élément, du plus récent au plus ancien : entretiens réalisés et interventions. */
+/**
+ * Ce qui a été fait sur l'élément, du plus récent au plus ancien : entretiens réalisés et interventions,
+ * et en gris les échéances passées volontairement (avec leur motif).
+ */
 export function Historique({ elementId, historique }: { elementId: string; historique: LigneHistorique[] }) {
   // On garde l'identifiant : la ligne affichée dans la fenêtre suit les données (pièces jointes retirées…).
   const [edition, setEdition] = useState<string | "intervention" | null>(null);
@@ -60,13 +63,20 @@ export function Historique({ elementId, historique }: { elementId: string; histo
           {historique.map((r) => (
             <Timeline.Item
               key={r.id}
-              bullet={r.entretienId ? <IconCheck size={12} /> : <IconTool size={12} />}
+              bullet={r.passee ? <IconPlayerSkipForward size={12} /> : r.entretienId ? <IconCheck size={12} /> : <IconTool size={12} />}
+              color={r.passee ? "gray" : undefined}
+              opacity={r.passee ? 0.7 : 1}
               title={
                 <Group justify="space-between" wrap="nowrap" align="flex-start">
                   <Group gap={6}>
-                    <Text fw={600} size="sm">
+                    <Text fw={600} size="sm" c={r.passee ? "dimmed" : undefined}>
                       {r.titre}
                     </Text>
+                    {r.passee && (
+                      <Badge size="xs" variant="outline" color="gray">
+                        Passé
+                      </Badge>
+                    )}
                     {!r.entretienId && (
                       <Badge size="xs" variant="light" color="gray">
                         Intervention
@@ -80,10 +90,14 @@ export function Historique({ elementId, historique }: { elementId: string; histo
                       </ActionIcon>
                     </Menu.Target>
                     <Menu.Dropdown>
-                      <Menu.Item leftSection={<IconPencil size={14} />} onClick={() => setEdition(r.id)}>
-                        Modifier, joindre un document
-                      </Menu.Item>
-                      <Menu.Divider />
+                      {!r.passee && (
+                        <>
+                          <Menu.Item leftSection={<IconPencil size={14} />} onClick={() => setEdition(r.id)}>
+                            Modifier, joindre un document
+                          </Menu.Item>
+                          <Menu.Divider />
+                        </>
+                      )}
                       <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => supprimer(r)}>
                         Supprimer
                       </Menu.Item>
@@ -96,7 +110,7 @@ export function Historique({ elementId, historique }: { elementId: string; histo
                 {[dateLisible(r.date), r.prestataireNom, r.cout != null && euros(r.cout)].filter(Boolean).join(" · ")}
               </Text>
               {r.note && (
-                <Text size="sm" mt={4} style={{ whiteSpace: "pre-line" }}>
+                <Text size="sm" mt={4} c={r.passee ? "dimmed" : undefined} style={{ whiteSpace: "pre-line" }}>
                   {r.note}
                 </Text>
               )}

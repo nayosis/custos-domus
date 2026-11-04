@@ -41,6 +41,8 @@ const entretien = (p: Partial<Suivi["entretiens"][number]>): Suivi["entretiens"]
   delaiAlerteJours: 7,
   etat: "a_faire",
   dateRdv: null,
+  heureRdv: null,
+  dureeRdvMinutes: null,
   actif: true,
   notes: null,
   elementId: "el",

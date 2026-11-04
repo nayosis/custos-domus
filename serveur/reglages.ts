@@ -120,6 +120,15 @@ export function regenererJetonIcal(utilisateurId: string) {
   baseComptes().query("UPDATE preference SET jeton_ical = ? WHERE utilisateur_id = ?").run(nouveauJeton(), utilisateurId);
 }
 
+/** Lien d'agenda de la famille : un seul pour l'installation, à ajouter à l'agenda partagé (Google, iCloud…). */
+export function jetonIcalFamille() {
+  const jeton = lireReglage("jeton_ical_famille");
+  if (jeton) return jeton;
+  ecrireReglage("jeton_ical_famille", nouveauJeton());
+  return lireReglage("jeton_ical_famille")!;
+}
+export const regenererJetonIcalFamille = () => ecrireReglage("jeton_ical_famille", nouveauJeton());
+
 /** Compte actif à qui appartient ce lien d'agenda, ou null. */
 export const utilisateurDuJetonIcal = (jeton: string) =>
   baseComptes()

@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
-import { Anchor, Badge, Box, Button, Card, Grid, Group, SegmentedControl, Select, SimpleGrid, Stack, Text, ThemeIcon, Title } from "@mantine/core";
+import { ActionIcon, Anchor, Badge, Box, Button, Card, Grid, Group, Menu, SegmentedControl, Select, SimpleGrid, Stack, Text, ThemeIcon, Title } from "@mantine/core";
 import {
-  IconAlertTriangle, IconCalendarCheck, IconCalendarDue, IconCalendarEvent, IconCheck, IconCircleCheck, IconHome, IconPhone, IconReceipt, IconShieldCheck, IconTool,
+  IconAlertTriangle, IconCalendarCheck, IconCalendarDue, IconCalendarEvent, IconCheck, IconCircleCheck, IconClockPause, IconDots, IconHome, IconPhone, IconPlayerSkipForward,
+  IconReceipt, IconShieldCheck, IconTool,
 } from "@tabler/icons-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -9,7 +10,7 @@ import { listeMaisons } from "../data/maisons";
 import { tableauDeBord } from "../data/tableauDeBord";
 import { AvisMiseAJour } from "../components/MiseAJour";
 import { BadgeGarantie } from "../components/BadgeGarantie";
-import { BadgeSituation, ModalRdv, type LigneEntretien } from "../components/Entretiens";
+import { BadgeSituation, ModalEcheance, ModalRdv, type LigneEntretien } from "../components/Entretiens";
 import { ModalRealisation } from "../components/ModalRealisation";
 import { dateLisible, duree, euros } from "../lib/dates";
 import { situation, type Situation } from "../lib/entretiens";
@@ -87,7 +88,9 @@ function Ou({ elementId, elementNom, maisonNom, avecMaison }: { elementId: strin
   );
 }
 
-function LigneAFaire({ e, avecMaison, onRdv, onFait }: { e: Classe; avecMaison: boolean; onRdv: () => void; onFait: () => void }) {
+function LigneAFaire({
+  e, avecMaison, onRdv, onFait, onEcheance,
+}: { e: Classe; avecMaison: boolean; onRdv: () => void; onFait: () => void; onEcheance: (mode: "passer" | "reporter") => void }) {
   const aPrendre = e.nature === "rdv";
   return (
     <Group gap="sm" wrap="nowrap" py="xs" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
@@ -104,6 +107,26 @@ function LigneAFaire({ e, avecMaison, onRdv, onFait }: { e: Classe; avecMaison: 
       <Button size="xs" variant={aPrendre ? "light" : "filled"} leftSection={aPrendre ? <IconCalendarCheck size={14} /> : <IconCheck size={14} />} onClick={aPrendre ? onRdv : onFait}>
         {aPrendre ? "RDV pris" : "Fait"}
       </Button>
+      <Menu position="bottom-end">
+        <Menu.Target>
+          <ActionIcon variant="subtle" color="gray" aria-label="Autres actions">
+            <IconDots size={16} />
+          </ActionIcon>
+        </Menu.Target>
+        <Menu.Dropdown>
+          {aPrendre && (
+            <Menu.Item leftSection={<IconCheck size={14} />} onClick={onFait}>
+              Marquer comme fait
+            </Menu.Item>
+          )}
+          <Menu.Item leftSection={<IconClockPause size={14} />} onClick={() => onEcheance("reporter")}>
+            Reporter à…
+          </Menu.Item>
+          <Menu.Item leftSection={<IconPlayerSkipForward size={14} />} onClick={() => onEcheance("passer")}>
+            Passer cette fois…
+          </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
     </Group>
   );
 }
@@ -116,6 +139,7 @@ export function Accueil() {
   const { data } = useQuery({ queryKey: ["tableau-de-bord", filtre ?? null], queryFn: () => tableauDeBord(filtre ?? null) });
   const [rdv, setRdv] = useState<Ligne | null>(null);
   const [fait, setFait] = useState<Ligne | null>(null);
+  const [echeance, setEcheance] = useState<{ e: LigneEntretien; mode: "passer" | "reporter" } | null>(null);
 
   const actives = (maisons ?? []).filter((m) => !m.archivee);
   const avecMaison = actives.length > 1 && !filtre;
@@ -218,7 +242,14 @@ export function Accueil() {
               {aFaire.length ? (
                 <Stack gap={0}>
                   {aFaire.map((e) => (
-                    <LigneAFaire key={e.id} e={e} avecMaison={avecMaison} onRdv={() => setRdv(e)} onFait={() => setFait(e)} />
+                    <LigneAFaire
+                      key={e.id}
+                      e={e}
+                      avecMaison={avecMaison}
+                      onRdv={() => setRdv(e)}
+                      onFait={() => setFait(e)}
+                      onEcheance={(mode) => setEcheance({ e: e as LigneEntretien, mode })}
+                    />
                   ))}
                 </Stack>
               ) : (
@@ -359,6 +390,7 @@ export function Accueil() {
       </Grid>
 
       <ModalRdv entretien={rdv as LigneEntretien | null} onClose={() => setRdv(null)} />
+      <ModalEcheance cible={echeance} onClose={() => setEcheance(null)} />
       <ModalRealisation elementId={fait?.elementId ?? ""} cible={fait ? { mode: "entretien", entretien: fait } : null} onClose={() => setFait(null)} />
     </Stack>
   );

@@ -7,7 +7,7 @@ import { and, asc, eq, isNotNull } from "drizzle-orm";
 import { db } from "../src/db/client";
 import { element, entretien, maison, prestataire } from "../src/db/schema";
 import { dateLisible, maintenantLocal } from "../src/lib/dates";
-import { ajouter, joursEntre, situation } from "../src/lib/entretiens";
+import { ajouter, joursEntre, libelleHeure, situation } from "../src/lib/entretiens";
 import { envoyerEmail, envoyerPush, type Message } from "./envoi";
 import { abonnementsDe, configEnvoi, derniereTournee, destinataires, envoiEmailPossible, noterTournee } from "./reglages";
 
@@ -27,6 +27,8 @@ export async function chargerSuivi() {
         delaiAlerteJours: entretien.delaiAlerteJours,
         etat: entretien.etat,
         dateRdv: entretien.dateRdv,
+        heureRdv: entretien.heureRdv,
+        dureeRdvMinutes: entretien.dureeRdvMinutes,
         actif: entretien.actif,
         notes: entretien.notes,
         elementId: element.id,
@@ -103,13 +105,14 @@ export async function calculerRappels(jour: string, derniere: string | null, opt
 // --- Mise en forme
 
 const ou = (e: { elementNom: string; maisonNom: string }) => `${e.elementNom}, ${e.maisonNom}`;
+const aLHeure = (e: LigneEntretien) => (e.heureRdv ? ` à ${libelleHeure(e.heureRdv)}` : "");
 const action = (e: LigneEntretien) => (e.nature === "rdv" ? "rendez-vous à prendre" : "à faire");
 
 function phrase(a: Alerte, jour: string) {
   switch (a.type) {
     case "rdv_demain": {
       const tel = a.e.prestataireTelephone ? ` (${a.e.prestataireNom}, ${a.e.prestataireTelephone})` : a.e.prestataireNom ? ` (${a.e.prestataireNom})` : "";
-      return `Rendez-vous demain : ${a.e.titre} — ${ou(a.e)}${tel}`;
+      return `Rendez-vous demain${aLHeure(a.e)} : ${a.e.titre} — ${ou(a.e)}${tel}`;
     }
     case "en_retard":
       return `En retard : ${a.e.titre} — ${ou(a.e)} (échéance du ${dateLisible(a.e.echeance)})`;
@@ -124,7 +127,7 @@ function sectionsRecap(r: Recapitulatif, jour: string) {
   return [
     { titre: "En retard", lignes: r.enRetard.map((e) => `${e.titre} — ${ou(e)} (depuis le ${dateLisible(e.echeance)})`) },
     { titre: "À prévoir", lignes: r.aPrevoir.map((e) => `${e.titre} — ${ou(e)} : ${action(e)} avant le ${dateLisible(e.echeance)}`) },
-    { titre: "Rendez-vous de la semaine", lignes: r.rendezVous.map((e) => `${dateLisible(e.dateRdv, { weekday: "long", day: "numeric", month: "long" })} : ${e.titre} — ${ou(e)}`) },
+    { titre: "Rendez-vous de la semaine", lignes: r.rendezVous.map((e) => `${dateLisible(e.dateRdv, { weekday: "long", day: "numeric", month: "long" })}${aLHeure(e)} : ${e.titre} — ${ou(e)}`) },
     { titre: "Garanties qui expirent", lignes: r.garanties.map((g) => `${g.nom} (${g.maisonNom}) : le ${dateLisible(g.finGarantie)}${g.finGarantie === jour ? " (aujourd'hui)" : ""}`) },
   ].filter((s) => s.lignes.length);
 }
