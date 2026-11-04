@@ -138,8 +138,8 @@ export function FicheElement() {
         {/* Sur téléphone, les entretiens d'abord : c'est ce qu'on vient chercher. */}
         <Grid.Col span={{ base: 12, md: 7 }} order={{ base: 1, md: 2 }}>
           <Stack gap="lg">
-            <Entretiens elementId={e.id} categorie={e.categorie} entretiens={entretiens} archive={e.archive} />
-            <Historique elementId={e.id} historique={historique} />
+            <Entretiens ou={{ elementId: e.id }} categorie={e.categorie} entretiens={entretiens} archive={e.archive} />
+            <Historique ou={{ elementId: e.id }} historique={historique} />
           </Stack>
         </Grid.Col>
         <Grid.Col span={{ base: 12, md: 5 }} order={{ base: 2, md: 1 }}>

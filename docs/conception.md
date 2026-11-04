@@ -69,9 +69,13 @@ les voitures, et les enfants à qui confier des choses. Décisions prises (novem
    dépassées) ; **reporter** une seule échéance (`echeance_initiale` garde la date d'origine : le rythme ne glisse
    pas) ; **heure et durée** des rendez-vous (facultatives ; créneau UTC et alarme 1 h avant dans l'agenda) ;
    **lien d'agenda de la famille** (un seul, réglage `jeton_ical_famille`, régénéré par un admin).
-2. « À faire » et routines : menu « Entretiens » renommé « À faire » ; une chose à faire peut être rattachée à la
-   maison sans élément ; type **routine** (ni coût ni prestataire, « fait » ou « passé », chaque « fait » compte pour
-   le jeu). Les poubelles se notent la veille de la collecte : pas d'heure de rappel spécifique.
+2. « À faire » et routines (fait) : page **À faire** par maison (`/a-faire`, dans la barre du bas à la place des
+   prestataires) ; une chose à faire ou une intervention peut être rattachée à la maison sans élément (`maison_id`,
+   l'un ou l'autre ; migration 0003, qui reconstruit `entretien` et `realisation`) ; nature **routine** (ni coût ni
+   prestataire, « Fait » en un geste à la date du jour, à date fixe, rappel le jour même, absente de
+   « Prochainement ») ; modèles « Routines » (poubelles verte et jaune, arrosage, draps). Les poubelles se notent la
+   veille de la collecte : pas d'heure de rappel spécifique. Les migrations s'exécutent clés étrangères suspendues
+   (vérifiées à la fin de chacune).
 3. Véhicules : rubrique à part (fiche, immatriculation, kilométrage) ; intervention rapide (moi ou un garage, prix
    approximatif, km, photo de facture) ; **relevé du compteur** demandé le 1er du mois (relance 3 jours après) ;
    entretiens au kilométrage « ou au temps, au premier atteint », date estimée d'après les relevés. Pas d'assurance.

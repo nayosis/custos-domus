@@ -10,7 +10,7 @@ import { listeMaisons } from "../data/maisons";
 import { tableauDeBord } from "../data/tableauDeBord";
 import { AvisMiseAJour } from "../components/MiseAJour";
 import { BadgeGarantie } from "../components/BadgeGarantie";
-import { BadgeSituation, ModalEcheance, ModalRdv, type LigneEntretien } from "../components/Entretiens";
+import { BadgeSituation, faireRoutine, IconeNature, ModalEcheance, ModalRdv, type LigneEntretien } from "../components/Entretiens";
 import { ModalRealisation } from "../components/ModalRealisation";
 import { dateLisible, duree, euros } from "../lib/dates";
 import { situation, type Situation } from "../lib/entretiens";
@@ -76,14 +76,27 @@ function Bloc({ titre, icone, vide, children }: { titre: string; icone: ReactNod
   );
 }
 
-/** Lien vers la fiche de l'élément, avec sa maison quand on regarde toutes les maisons. */
-function Ou({ elementId, elementNom, maisonNom, avecMaison }: { elementId: string; elementNom: string; maisonNom: string; avecMaison: boolean }) {
+/**
+ * Lien vers la fiche de l'élément, avec sa maison quand on regarde toutes les maisons ;
+ * pour ce qui se fait sur la maison elle-même, lien vers sa page « À faire ».
+ */
+function Ou({
+  elementId, elementNom, maisonId, maisonNom, avecMaison,
+}: { elementId: string | null; elementNom: string | null; maisonId: string; maisonNom: string; avecMaison: boolean }) {
   return (
     <Text size="xs" c="dimmed" truncate>
-      <Anchor size="xs" c="dimmed" renderRoot={(p) => <Link {...p} to="/elements/$id" params={{ id: elementId }} />}>
-        {elementNom}
-      </Anchor>
-      {avecMaison && ` · ${maisonNom}`}
+      {elementId ? (
+        <>
+          <Anchor size="xs" c="dimmed" renderRoot={(p) => <Link {...p} to="/elements/$id" params={{ id: elementId }} />}>
+            {elementNom}
+          </Anchor>
+          {avecMaison && ` · ${maisonNom}`}
+        </>
+      ) : (
+        <Anchor size="xs" c="dimmed" renderRoot={(p) => <Link {...p} to="/a-faire" search={{ maison: maisonId }} />}>
+          {avecMaison ? maisonNom : "Sur la maison"}
+        </Anchor>
+      )}
     </Text>
   );
 }
@@ -94,7 +107,7 @@ function LigneAFaire({
   const aPrendre = e.nature === "rdv";
   return (
     <Group gap="sm" wrap="nowrap" py="xs" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
-      {aPrendre ? <IconCalendarEvent size={20} color="var(--mantine-color-brique-6)" style={{ flexShrink: 0 }} /> : <IconTool size={20} color="var(--mantine-color-brique-6)" style={{ flexShrink: 0 }} />}
+      <IconeNature nature={e.nature} />
       <Box style={{ flex: 1, minWidth: 0 }}>
         <Group gap="xs">
           <Text fw={600} size="sm">
@@ -102,7 +115,7 @@ function LigneAFaire({
           </Text>
           <BadgeSituation e={e} s={e.s} />
         </Group>
-        <Ou elementId={e.elementId} elementNom={e.elementNom} maisonNom={e.maisonNom} avecMaison={avecMaison} />
+        <Ou elementId={e.elementId} elementNom={e.elementNom} maisonId={e.maisonId} maisonNom={e.maisonNom} avecMaison={avecMaison} />
       </Box>
       <Button size="xs" variant={aPrendre ? "light" : "filled"} leftSection={aPrendre ? <IconCalendarCheck size={14} /> : <IconCheck size={14} />} onClick={aPrendre ? onRdv : onFait}>
         {aPrendre ? "RDV pris" : "Fait"}
@@ -193,7 +206,8 @@ export function Accueil() {
   const enRetard = classes.filter((e) => e.s.etat === "en_retard");
   const aPrevoir = classes.filter((e) => e.s.etat === "a_prevoir");
   const rendezVous = classes.filter((e) => e.s.etat === "rdv_pris").sort((a, b) => (a.dateRdv ?? "9999").localeCompare(b.dateRdv ?? "9999"));
-  const prochainement = classes.filter((e) => e.s.etat === "a_venir" && e.s.jours <= PROCHAINEMENT_JOURS);
+  // Les routines reviennent sans cesse : elles n'apparaissent que le moment venu.
+  const prochainement = classes.filter((e) => e.s.etat === "a_venir" && e.s.jours <= PROCHAINEMENT_JOURS && e.nature !== "routine");
   const aFaire = [...enRetard, ...aPrevoir];
   const prochainRdv = rendezVous.find((e) => e.dateRdv);
   const { depenses } = data;
@@ -247,7 +261,7 @@ export function Accueil() {
                       e={e}
                       avecMaison={avecMaison}
                       onRdv={() => setRdv(e)}
-                      onFait={() => setFait(e)}
+                      onFait={() => (e.nature === "routine" ? faireRoutine(e) : setFait(e))}
                       onEcheance={(mode) => setEcheance({ e: e as LigneEntretien, mode })}
                     />
                   ))}
@@ -285,7 +299,7 @@ export function Accueil() {
                         <Text size="sm" fw={500} truncate>
                           {e.titre}
                         </Text>
-                        <Ou elementId={e.elementId} elementNom={e.elementNom} maisonNom={e.maisonNom} avecMaison={avecMaison} />
+                        <Ou elementId={e.elementId} elementNom={e.elementNom} maisonId={e.maisonId} maisonNom={e.maisonNom} avecMaison={avecMaison} />
                       </Box>
                       <Text size="sm" c="dimmed" style={{ flexShrink: 0 }}>
                         {dateLisible(e.echeance, { day: "numeric", month: "short" })}
@@ -309,7 +323,7 @@ export function Accueil() {
                         <Text size="sm" fw={500} truncate>
                           {e.titre}
                         </Text>
-                        <Ou elementId={e.elementId} elementNom={e.elementNom} maisonNom={e.maisonNom} avecMaison={avecMaison} />
+                        <Ou elementId={e.elementId} elementNom={e.elementNom} maisonId={e.maisonId} maisonNom={e.maisonNom} avecMaison={avecMaison} />
                         {e.prestataireNom && (
                           <Text size="xs" c="dimmed">
                             {e.prestataireNom}
@@ -372,7 +386,7 @@ export function Accueil() {
                             </Badge>
                           )}
                         </Group>
-                        <Ou elementId={r.elementId} elementNom={r.elementNom} maisonNom={r.maisonNom} avecMaison={avecMaison} />
+                        <Ou elementId={r.elementId} elementNom={r.elementNom} maisonId={r.maisonId} maisonNom={r.maisonNom} avecMaison={avecMaison} />
                       </Box>
                       <Box ta="right" style={{ flexShrink: 0 }}>
                         <Text size="xs" c="dimmed">
@@ -391,7 +405,7 @@ export function Accueil() {
 
       <ModalRdv entretien={rdv as LigneEntretien | null} onClose={() => setRdv(null)} />
       <ModalEcheance cible={echeance} onClose={() => setEcheance(null)} />
-      <ModalRealisation elementId={fait?.elementId ?? ""} cible={fait ? { mode: "entretien", entretien: fait } : null} onClose={() => setFait(null)} />
+      <ModalRealisation cible={fait ? { mode: "entretien", entretien: fait } : null} onClose={() => setFait(null)} />
     </Stack>
   );
 }

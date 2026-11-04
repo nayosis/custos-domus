@@ -17,7 +17,7 @@ export const MODULES_RPC = { tableauDeBord, maisons, elements, entretiens, reali
 export type Droit = "lecture" | "ecriture";
 
 /** Fonctions qui ne modifient rien. Toute autre fonction exposée est une écriture. */
-const LECTURE = new Set(["listeMaisons", "listeElements", "ficheElement", "listePrestataires", "listeModeles", "tableauDeBord"]);
+const LECTURE = new Set(["listeMaisons", "aFaireMaison", "listeElements", "ficheElement", "listePrestataires", "listeModeles", "tableauDeBord"]);
 
 type Fonction = (...args: unknown[]) => unknown;
 

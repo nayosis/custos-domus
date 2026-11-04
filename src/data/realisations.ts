@@ -4,6 +4,7 @@ import { realisation, type Realisation } from "../db/schema";
 import { lireDate } from "../lib/dates";
 import { ErreurMetier } from "../../serveur/erreurs";
 import { supprimerFichiers } from "../../serveur/fichiers";
+import { rattachement, type Rattachement } from "./entretiens";
 import { verifierVersion, versionDe } from "./version";
 
 type Saisie = Partial<Pick<Realisation, "date" | "titre" | "note" | "cout" | "prestataireId">>;
@@ -29,11 +30,12 @@ function nettoyer(v: Saisie) {
   return r;
 }
 
-/** Intervention ponctuelle consignée après coup (réparation, dépannage…), sans entretien prévu. */
-export async function creerRealisation(v: Saisie & { elementId: string; date: string; titre: string }) {
+/** Intervention ponctuelle consignée après coup (réparation, dépannage…), sur un élément ou la maison. */
+export async function creerRealisation(v: Saisie & Rattachement & { date: string; titre: string }) {
+  const ou = rattachement(v);
   const valeurs = nettoyer(v);
   const id = newId();
-  await db.insert(realisation).values({ ...valeurs, id, elementId: v.elementId, date: valeurs.date!, titre: valeurs.titre! });
+  await db.insert(realisation).values({ ...valeurs, id, ...ou, date: valeurs.date!, titre: valeurs.titre! });
   return id;
 }
 

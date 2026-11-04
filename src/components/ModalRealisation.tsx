@@ -4,6 +4,7 @@ import { notifications } from "@mantine/notifications";
 import { IconCamera, IconPaperclip, IconX } from "@tabler/icons-react";
 import { creerDocument, supprimerDocument } from "../data/documents";
 import { realiserEntretien } from "../data/entretiens";
+import type { Rattachement } from "../data/entretiens";
 import { creerRealisation, majRealisation } from "../data/realisations";
 import type { Document, Entretien, Realisation } from "../db/schema";
 import { aujourdhui } from "../lib/dates";
@@ -27,7 +28,8 @@ type Saisie = { date: string | null; titre: string; note: string; cout: number |
 
 const ACCEPTE = "application/pdf,image/jpeg,image/png,image/webp,image/gif,image/heic";
 
-export function ModalRealisation({ elementId, cible, onClose }: { elementId: string; cible: Cible | null; onClose: () => void }) {
+/** `ou` : élément ou maison d'une nouvelle intervention (inutile pour les autres modes). */
+export function ModalRealisation({ ou, cible, onClose }: { ou?: Rattachement; cible: Cible | null; onClose: () => void }) {
   const { tactile } = useEcran();
   const [v, setV] = useState<Saisie>({ date: null, titre: "", note: "", cout: "", prestataireId: null });
   const [fichiers, setFichiers] = useState<File[]>([]);
@@ -58,7 +60,7 @@ export function ModalRealisation({ elementId, cible, onClose }: { elementId: str
         cible.mode === "entretien"
           ? realiserEntretien(cible.entretien.id, commun)
           : cible.mode === "intervention"
-            ? creerRealisation({ ...commun, elementId, titre: v.titre })
+            ? creerRealisation({ ...commun, ...ou!, titre: v.titre })
             : majRealisation(cible.realisation.id, { ...commun, titre: v.titre }, cible.realisation.modifieLe).then(() => cible.realisation.id),
       );
       if (typeof id !== "string") return;

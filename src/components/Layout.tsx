@@ -3,7 +3,7 @@ import {
   Alert, AppShell, Badge, Box, Burger, Button, Divider, Drawer, Group, Menu, Modal, NavLink, PasswordInput, Stack, Text, UnstyledButton, SegmentedControl, useMantineColorScheme,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconBell, IconBrandGithub, IconChevronUp, IconDatabaseExport, IconDots, IconHistory, IconHome, IconKey, IconLayoutDashboard, IconLogout, IconPackage, IconTool, IconUserCog } from "@tabler/icons-react";
+import { IconBell, IconBrandGithub, IconChevronUp, IconDatabaseExport, IconDots, IconHistory, IconHome, IconKey, IconLayoutDashboard, IconListCheck, IconLogout, IconPackage, IconTool, IconUserCog } from "@tabler/icons-react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { appelApi } from "../lib/rpc";
 import { deconnexion, estAdmin, LIBELLES_ROLES, utilisateur } from "../lib/session";
@@ -14,14 +14,15 @@ import { DEPOT_URL } from "../lib/versions";
 import { BadgeMiseAJour } from "./MiseAJour";
 import { Logo } from "./Logo";
 
-/** `court` : libellé de la barre du bas, sur téléphone. */
-type Entree = { to: string; label: string; court?: string; icone: typeof IconHome; actif: (p: string) => boolean };
+/** `court` : libellé de la barre du bas, sur téléphone ; `barre: false` : seulement dans « Plus ». */
+type Entree = { to: string; label: string; court?: string; barre?: false; icone: typeof IconHome; actif: (p: string) => boolean };
 
 const ENTREES: Entree[] = [
   { to: "/", label: "Tableau de bord", court: "Accueil", icone: IconLayoutDashboard, actif: (p) => p === "/" },
+  { to: "/a-faire", label: "À faire", icone: IconListCheck, actif: (p) => p.startsWith("/a-faire") },
   { to: "/maisons", label: "Maisons", icone: IconHome, actif: (p) => p.startsWith("/maisons") },
   { to: "/elements", label: "Éléments", icone: IconPackage, actif: (p) => p.startsWith("/elements") },
-  { to: "/prestataires", label: "Prestataires", court: "Artisans", icone: IconTool, actif: (p) => p.startsWith("/prestataires") },
+  { to: "/prestataires", label: "Prestataires", court: "Artisans", barre: false, icone: IconTool, actif: (p) => p.startsWith("/prestataires") },
 ];
 
 /** Pour tous, dans le menu (pas dans la barre du bas du téléphone). */
@@ -180,7 +181,7 @@ function BarreBas({ chemin, onPlus }: { chemin: string; onPlus: () => void }) {
       bg="var(--t-surface)"
       style={{ borderTop: "1px solid var(--mantine-color-default-border)", paddingBottom: "env(safe-area-inset-bottom)", flexShrink: 0 }}
     >
-      {ENTREES.map((e) => (
+      {ENTREES.filter((e) => e.barre !== false).map((e) => (
         <UnstyledButton key={e.to} component={Link} to={e.to} style={{ flex: 1 }}>
           {bouton(
             <>

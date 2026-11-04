@@ -3,13 +3,16 @@ import {
   ActionIcon, Alert, Badge, Box, Button, Card, Collapse, Group, Menu, Modal, NumberInput, Radio, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Textarea, Title, UnstyledButton,
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
+import { notifications } from "@mantine/notifications";
 import { TimeInput } from "@mantine/dates";
 import {
   IconCalendarCheck, IconCalendarEvent, IconCalendarX, IconCheck, IconChevronDown, IconChevronRight, IconClockPause, IconDots, IconPlayerPause, IconPlayerPlay,
-  IconPlayerSkipForward, IconPencil, IconPlus, IconRepeat, IconTool, IconTrash,
+  IconPlayerSkipForward, IconPencil, IconPlus, IconListCheck, IconRotateClockwise, IconTool, IconTrash,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
-import { annulerRdv, creerEntretien, listeModeles, majEntretien, passerEcheance, prendreRdv, reporterEcheance, supprimerEntretien } from "../data/entretiens";
+import {
+  annulerRdv, creerEntretien, listeModeles, majEntretien, passerEcheance, prendreRdv, realiserEntretien, reporterEcheance, supprimerEntretien, type Rattachement,
+} from "../data/entretiens";
 import type { Entretien, ModeleEntretien } from "../db/schema";
 import { aujourdhui, dateLisible, duree } from "../lib/dates";
 import {
@@ -21,6 +24,17 @@ import { ChampDate, ChampPrestataire } from "./Champs";
 import { ModalRealisation } from "./ModalRealisation";
 
 export type LigneEntretien = Entretien & { prestataireNom: string | null };
+
+/** Icône d'une chose à faire selon sa nature. */
+export const IconeNature = ({ nature, size = 20 }: { nature: string; size?: number }) => {
+  const Icone = nature === "rdv" ? IconCalendarEvent : nature === "routine" ? IconRotateClockwise : IconTool;
+  return <Icone size={size} color="var(--mantine-color-brique-6)" style={{ flexShrink: 0 }} />;
+};
+
+/** Routine : « Fait » en un geste, à la date du jour, sans fenêtre. */
+export async function faireRoutine(e: Pick<Entretien, "id" | "titre">) {
+  if ((await ecrire<unknown>(() => realiserEntretien(e.id))) !== undefined) notifications.show({ color: "green", message: `${e.titre} : fait` });
+}
 
 /** Badge d'état : en retard (rouge), à prévoir (orange), rendez-vous pris (bleu), à venir (gris). */
 export function BadgeSituation({ e, s }: { e: Pick<Entretien, "nature" | "echeance"> & { heureRdv?: string | null }; s: Situation }) {
@@ -107,7 +121,7 @@ const depuis = (e: Entretien): Saisie => ({
 });
 
 /** Création (entretien absent), éventuellement depuis un modèle de la bibliothèque, ou modification. */
-function ModalEntretien({ elementId, categorie, entretien, opened, onClose }: { elementId: string; categorie: string | null; entretien: Entretien | null; opened: boolean; onClose: () => void }) {
+function ModalEntretien({ ou, categorie, entretien, opened, onClose }: { ou: Rattachement; categorie: string | null; entretien: Entretien | null; opened: boolean; onClose: () => void }) {
   const { data: modeles = [] } = useQuery({ queryKey: ["modeles"], queryFn: () => listeModeles(), enabled: opened && !entretien });
   const [v, setV] = useState<Saisie>(VIDE);
   const [modele, setModele] = useState<ModeleEntretien | null>(null);
@@ -116,7 +130,8 @@ function ModalEntretien({ elementId, categorie, entretien, opened, onClose }: { 
   if (ouverture !== cle) {
     setCle(ouverture);
     setModele(null);
-    if (opened) setV(entretien ? depuis(entretien) : VIDE);
+    // Sur la maison elle-même, on ajoute surtout des routines (poubelles, tonte…).
+    if (opened) setV(entretien ? depuis(entretien) : ou.maisonId ? { ...VIDE, nature: "routine", delai: DELAI_DEFAUT.routine, ancrage: "fixe", intervalleUnite: "semaine" } : VIDE);
   }
   const maj = (p: Partial<Saisie>) => setV((s) => ({ ...s, ...p }));
 
@@ -141,6 +156,7 @@ function ModalEntretien({ elementId, categorie, entretien, opened, onClose }: { 
       intervalleValeur: m.intervalleValeur ?? 1,
       intervalleUnite: (m.intervalleUnite as Unite) ?? "an",
       delai: m.delaiAlerteJours,
+      ...(m.nature === "routine" ? { ancrage: "fixe" as const } : {}),
       delaiModifie: false,
     });
   };
@@ -149,6 +165,7 @@ function ModalEntretien({ elementId, categorie, entretien, opened, onClose }: { 
   // Échéance qui sera retenue à la création : saisie, sinon dernière fois + intervalle, sinon aujourd'hui.
   const echeancePrevue = v.echeance ?? (v.periodique && v.derniere && valeur ? ajouter(v.derniere, valeur, v.intervalleUnite) : aujourdhui());
   const delai = typeof v.delai === "number" ? v.delai : 0;
+  const routine = v.nature === "routine";
   const valide = v.titre.trim() && (!v.periodique || valeur >= 1) && typeof v.delai === "number" && (!entretien || v.echeance);
 
   const enregistrer = async () => {
@@ -159,24 +176,24 @@ function ModalEntretien({ elementId, categorie, entretien, opened, onClose }: { 
       intervalleUnite: v.periodique ? v.intervalleUnite : null,
       ancrage: v.ancrage,
       delaiAlerteJours: delai,
-      prestataireId: v.prestataireId,
+      prestataireId: routine ? null : v.prestataireId,
       notes: v.notes,
     };
     const res = await ecrire<unknown>(() =>
       entretien
         ? majEntretien(entretien.id, { ...valeurs, echeance: v.echeance! }, entretien.modifieLe)
-        : creerEntretien({ ...valeurs, elementId, echeance: v.echeance ?? undefined, derniereRealisation: v.periodique ? v.derniere : null }),
+        : creerEntretien({ ...valeurs, ...ou, echeance: v.echeance ?? undefined, derniereRealisation: v.periodique ? v.derniere : null }),
     );
     if (res !== undefined) onClose();
   };
 
   return (
-    <Modal opened={opened} onClose={onClose} title={entretien ? "Modifier l'entretien" : "Nouvel entretien"} size="lg">
+    <Modal opened={opened} onClose={onClose} title={entretien ? `Modifier : ${entretien.titre}` : "Nouvelle chose à faire"} size="lg">
       <Stack>
         {!entretien && (
           <Select
             label="Partir d'un modèle"
-            placeholder="Vidange de fosse septique, entretien de chaudière…"
+            placeholder={ou.maisonId ? "Sortir la poubelle jaune, arroser les plantes…" : "Vidange de fosse septique, entretien de chaudière…"}
             data={choixModeles}
             value={modele?.id ?? null}
             onChange={appliquer}
@@ -190,7 +207,7 @@ function ModalEntretien({ elementId, categorie, entretien, opened, onClose }: { 
             <Text size="sm">{modele.description}</Text>
           </Alert>
         )}
-        <TextInput label="Titre" placeholder="Entretien annuel, nettoyage du filtre…" required value={v.titre} onChange={(e) => maj({ titre: e.currentTarget.value })} data-autofocus={!!entretien} />
+        <TextInput label="Titre" placeholder={ou.maisonId ? "Sortir la poubelle verte, tondre la pelouse…" : "Entretien annuel, nettoyage du filtre…"} required value={v.titre} onChange={(e) => maj({ titre: e.currentTarget.value })} data-autofocus={!!entretien} />
         <div>
           <Text size="sm" fw={500} mb={4}>
             Nature
@@ -198,10 +215,18 @@ function ModalEntretien({ elementId, categorie, entretien, opened, onClose }: { 
           <SegmentedControl
             fullWidth
             value={v.nature}
-            onChange={(n) => maj({ nature: n as Nature, ...(v.delaiModifie ? {} : { delai: DELAI_DEFAUT[n as Nature] }) })}
+            onChange={(n) =>
+              maj({
+                nature: n as Nature,
+                ...(v.delaiModifie ? {} : { delai: DELAI_DEFAUT[n as Nature] }),
+                // Une routine garde ses jours (le ramassage du mercredi), même faite en avance ou en retard.
+                ...(n === "routine" && !entretien ? { ancrage: "fixe" as const } : {}),
+              })
+            }
             data={[
-              { value: "tache", label: "Tâche à faire soi-même" },
-              { value: "rdv", label: "Rendez-vous à prendre" },
+              { value: "tache", label: "Tâche" },
+              { value: "rdv", label: "Rendez-vous" },
+              { value: "routine", label: "Routine" },
             ]}
           />
         </div>
@@ -273,7 +298,13 @@ function ModalEntretien({ elementId, categorie, entretien, opened, onClose }: { 
           value={v.delai}
           onChange={(x) => maj({ delai: x, delaiModifie: true })}
         />
-        <ChampPrestataire label="Prestataire habituel" value={v.prestataireId} onChange={(p) => maj({ prestataireId: p })} />
+        {routine ? (
+          <Text size="xs" c="dimmed">
+            Routine : « Fait » en un geste, sans coût ni prestataire. À noter le jour où il faut le faire (la veille du ramassage pour les poubelles).
+          </Text>
+        ) : (
+          <ChampPrestataire label="Prestataire habituel" value={v.prestataireId} onChange={(p) => maj({ prestataireId: p })} />
+        )}
         <Textarea label="Notes" autosize minRows={2} value={v.notes} onChange={(e) => maj({ notes: e.currentTarget.value })} />
         <Button onClick={enregistrer} disabled={!valide}>
           Enregistrer
@@ -387,7 +418,6 @@ function Ligne({
   e, onModifier, onRdv, onFait, onEcheance,
 }: { e: LigneEntretien; onModifier: () => void; onRdv: () => void; onFait: () => void; onEcheance: (mode: "passer" | "reporter") => void }) {
   const s = situation(e, aujourdhui());
-  const Icone = e.nature === "rdv" ? IconCalendarEvent : IconTool;
   const aPrendre = e.actif && e.nature === "rdv" && e.etat !== "rdv_pris";
   // Bouton d'action seulement quand c'est d'actualité ; sinon, dans le menu.
   const urgent = s.etat === "en_retard" || s.etat === "a_prevoir" || s.etat === "rdv_pris";
@@ -407,7 +437,9 @@ function Ligne({
 
   return (
     <Group gap="sm" wrap="nowrap" py="xs" align="flex-start" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }} opacity={e.actif ? 1 : 0.6}>
-      <Icone size={20} color="var(--mantine-color-brique-6)" style={{ flexShrink: 0, marginTop: 2 }} />
+      <Box mt={2}>
+        <IconeNature nature={e.nature} />
+      </Box>
       <Box style={{ flex: 1, minWidth: 0 }}>
         <Group gap="xs">
           <Text fw={600} size="sm">
@@ -487,8 +519,8 @@ function Ligne({
   );
 }
 
-/** Entretiens d'un élément : à faire, rendez-vous, et ceux qui sont terminés ou suspendus (repliés). */
-export function Entretiens({ elementId, categorie, entretiens, archive }: { elementId: string; categorie: string | null; entretiens: LigneEntretien[]; archive: boolean }) {
+/** Choses à faire d'un élément ou d'une maison : en cours, et celles qui sont terminées ou suspendues (repliées). */
+export function Entretiens({ ou, categorie, entretiens, archive }: { ou: Rattachement; categorie: string | null; entretiens: LigneEntretien[]; archive: boolean }) {
   const [edition, setEdition] = useState<{ entretien: Entretien | null } | null>(null);
   const [rdv, setRdv] = useState<LigneEntretien | null>(null);
   const [fait, setFait] = useState<LigneEntretien | null>(null);
@@ -502,7 +534,7 @@ export function Entretiens({ elementId, categorie, entretiens, archive }: { elem
       e={e}
       onModifier={() => setEdition({ entretien: e })}
       onRdv={() => setRdv(e)}
-      onFait={() => setFait(e)}
+      onFait={() => (e.nature === "routine" ? faireRoutine(e) : setFait(e))}
       onEcheance={(mode) => setEcheance({ e, mode })}
     />
   );
@@ -511,8 +543,8 @@ export function Entretiens({ elementId, categorie, entretiens, archive }: { elem
     <Card withBorder>
       <Group justify="space-between" mb="xs">
         <Group gap="xs">
-          <IconRepeat size={18} />
-          <Title order={4}>Entretiens</Title>
+          <IconListCheck size={18} />
+          <Title order={4}>À faire</Title>
         </Group>
         {!archive && (
           <Button size="xs" leftSection={<IconPlus size={16} />} onClick={() => setEdition({ entretien: null })}>
@@ -523,7 +555,11 @@ export function Entretiens({ elementId, categorie, entretiens, archive }: { elem
 
       {actifs.length === 0 && (
         <Text size="sm" c="dimmed" py="md" ta="center">
-          {archive ? "Élément archivé : plus d'entretien suivi." : "Vidange tous les 4 ans, entretien annuel, nettoyage d'un filtre… Partez d'un modèle ou décrivez le vôtre."}
+          {archive
+            ? "Archivé : plus rien de suivi."
+            : ou.maisonId
+              ? "Sortir les poubelles, tondre, arroser… Ce qui se fait sur la maison elle-même, sans équipement particulier."
+              : "Vidange tous les 4 ans, entretien annuel, nettoyage d'un filtre… Partez d'un modèle ou décrivez le vôtre."}
         </Text>
       )}
       <Stack gap={0}>{actifs.map(ligne)}</Stack>
@@ -541,10 +577,10 @@ export function Entretiens({ elementId, categorie, entretiens, archive }: { elem
         </>
       )}
 
-      <ModalEntretien elementId={elementId} categorie={categorie} entretien={edition?.entretien ?? null} opened={!!edition} onClose={() => setEdition(null)} />
+      <ModalEntretien ou={ou} categorie={categorie} entretien={edition?.entretien ?? null} opened={!!edition} onClose={() => setEdition(null)} />
       <ModalRdv entretien={rdv} onClose={() => setRdv(null)} />
       <ModalEcheance cible={echeance} onClose={() => setEcheance(null)} />
-      <ModalRealisation elementId={elementId} cible={fait ? { mode: "entretien", entretien: fait } : null} onClose={() => setFait(null)} />
+      <ModalRealisation cible={fait ? { mode: "entretien", entretien: fait } : null} onClose={() => setFait(null)} />
     </Card>
   );
 }

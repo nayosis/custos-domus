@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, getTableColumns, gte, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, gte, isNull, lte, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { element, entretien, maison, prestataire, realisation } from "../db/schema";
 import { aujourdhui } from "../lib/dates";
@@ -16,15 +16,18 @@ export async function tableauDeBord(maisonId?: string | null) {
   const annee = Number(jour.slice(0, 4));
   const suivis = and(eq(maison.archivee, false), eq(element.archive, false), maisonId ? eq(maison.id, maisonId) : undefined);
   const lieu = { elementNom: element.nom, maisonId: maison.id, maisonNom: maison.nom };
+  // Chose à faire sur un élément (non archivé) ou directement sur la maison.
+  const suivie = and(eq(maison.archivee, false), or(isNull(entretien.elementId), eq(element.archive, false)), maisonId ? eq(maison.id, maisonId) : undefined);
+  const maisonDe = (t: typeof entretien | typeof realisation) => sql`${maison.id} = coalesce(${t.maisonId}, ${element.maisonId})`;
 
   const [entretiens, garanties, dernieres, depenses, achats] = await Promise.all([
     db
       .select({ ...getTableColumns(entretien), ...lieu, prestataireNom: prestataire.nom, prestataireTelephone: prestataire.telephone })
       .from(entretien)
-      .innerJoin(element, eq(element.id, entretien.elementId))
-      .innerJoin(maison, eq(maison.id, element.maisonId))
+      .leftJoin(element, eq(element.id, entretien.elementId))
+      .innerJoin(maison, maisonDe(entretien))
       .leftJoin(prestataire, eq(prestataire.id, entretien.prestataireId))
-      .where(and(suivis, eq(entretien.actif, true)))
+      .where(and(suivie, eq(entretien.actif, true)))
       .orderBy(asc(entretien.echeance)),
     db
       .select({ id: element.id, nom: element.nom, finGarantie: element.finGarantie, maisonId: maison.id, maisonNom: maison.nom })
@@ -35,8 +38,8 @@ export async function tableauDeBord(maisonId?: string | null) {
     db
       .select({ ...getTableColumns(realisation), ...lieu, prestataireNom: prestataire.nom })
       .from(realisation)
-      .innerJoin(element, eq(element.id, realisation.elementId))
-      .innerJoin(maison, eq(maison.id, element.maisonId))
+      .leftJoin(element, eq(element.id, realisation.elementId))
+      .innerJoin(maison, maisonDe(realisation))
       .leftJoin(prestataire, eq(prestataire.id, realisation.prestataireId))
       // L'historique d'un élément archivé (remplacé, vendu) compte encore : on ne filtre que les maisons.
       .where(and(eq(maison.archivee, false), eq(realisation.passee, false), maisonId ? eq(maison.id, maisonId) : undefined))
@@ -45,8 +48,8 @@ export async function tableauDeBord(maisonId?: string | null) {
     db
       .select({ annee: sql<string>`substr(${realisation.date}, 1, 4)`, total: sql<number>`coalesce(sum(${realisation.cout}), 0)`, nombre: sql<number>`count(${realisation.cout})` })
       .from(realisation)
-      .innerJoin(element, eq(element.id, realisation.elementId))
-      .innerJoin(maison, eq(maison.id, element.maisonId))
+      .leftJoin(element, eq(element.id, realisation.elementId))
+      .innerJoin(maison, maisonDe(realisation))
       .where(and(eq(maison.archivee, false), maisonId ? eq(maison.id, maisonId) : undefined, gte(realisation.date, `${annee - 1}-01-01`), lte(realisation.date, `${annee}-12-31`)))
       .groupBy(sql`1`),
     db

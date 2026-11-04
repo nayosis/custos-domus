@@ -77,18 +77,19 @@ export const element = sqliteTable(
 );
 
 /**
- * Ce qu'il y a à faire sur un élément : une tâche à faire soi-même ou un rendez-vous à prendre.
- * Récurrent (intervalle renseigné) ou ponctuel (intervalle vide : clos une fois réalisé).
+ * Une chose à faire, sur un élément ou directement sur la maison (sortir les poubelles) : une tâche à faire
+ * soi-même, un rendez-vous à prendre, ou une routine (ni coût ni prestataire).
+ * Récurrente (intervalle renseigné) ou ponctuelle (intervalle vide : close une fois réalisée).
+ * Soit elementId (la maison est celle de l'élément), soit maisonId — jamais les deux.
  */
 export const entretien = sqliteTable(
   "entretien",
   {
     id: id(),
-    elementId: text("element_id")
-      .notNull()
-      .references(() => element.id, { onDelete: "cascade" }),
+    elementId: text("element_id").references(() => element.id, { onDelete: "cascade" }),
+    maisonId: text("maison_id").references(() => maison.id, { onDelete: "cascade" }),
     titre: text("titre").notNull(),
-    /** tache, rdv */
+    /** tache, rdv, routine */
     nature: text("nature").notNull().default("tache"),
     intervalleValeur: integer("intervalle_valeur"),
     /** jour, semaine, mois, an */
@@ -112,17 +113,19 @@ export const entretien = sqliteTable(
     creeLe: creeLe(),
     ...tracabilite(),
   },
-  (t) => [index("entretien_element_idx").on(t.elementId), index("entretien_echeance_idx").on(t.echeance)],
+  (t) => [index("entretien_element_idx").on(t.elementId), index("entretien_maison_idx").on(t.maisonId), index("entretien_echeance_idx").on(t.echeance)],
 );
 
-/** Ce qui a été fait : un entretien réalisé, ou une intervention ponctuelle consignée (réparation…). */
+/**
+ * Ce qui a été fait : une chose à faire réalisée, ou une intervention ponctuelle consignée (réparation…).
+ * Comme la chose à faire : soit elementId, soit maisonId.
+ */
 export const realisation = sqliteTable(
   "realisation",
   {
     id: id(),
-    elementId: text("element_id")
-      .notNull()
-      .references(() => element.id, { onDelete: "cascade" }),
+    elementId: text("element_id").references(() => element.id, { onDelete: "cascade" }),
+    maisonId: text("maison_id").references(() => maison.id, { onDelete: "cascade" }),
     /** Vide : intervention ponctuelle sans entretien prévu. */
     entretienId: text("entretien_id").references(() => entretien.id, { onDelete: "set null" }),
     date: text("date").notNull(),
@@ -135,7 +138,7 @@ export const realisation = sqliteTable(
     creeLe: creeLe(),
     ...tracabilite(),
   },
-  (t) => [index("realisation_element_idx").on(t.elementId), index("realisation_date_idx").on(t.date)],
+  (t) => [index("realisation_element_idx").on(t.elementId), index("realisation_maison_idx").on(t.maisonId), index("realisation_date_idx").on(t.date)],
 );
 
 /** Un fichier (PDF, photo) rattaché à un élément ou à une réalisation. */

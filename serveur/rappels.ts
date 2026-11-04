@@ -3,11 +3,11 @@
  * rendez-vous le lendemain, garantie qui expire dans un mois) ; le lundi, en plus, le récapitulatif
  * de tout ce qui attend. Maisons et éléments archivés, entretiens suspendus : jamais d'alerte.
  */
-import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { db } from "../src/db/client";
 import { element, entretien, maison, prestataire } from "../src/db/schema";
 import { dateLisible, maintenantLocal } from "../src/lib/dates";
-import { ajouter, joursEntre, libelleHeure, situation } from "../src/lib/entretiens";
+import { ajouter, joursEntre, libelleHeure, lieu, situation } from "../src/lib/entretiens";
 import { envoyerEmail, envoyerPush, type Message } from "./envoi";
 import { abonnementsDe, configEnvoi, derniereTournee, destinataires, envoiEmailPossible, noterTournee } from "./reglages";
 
@@ -31,17 +31,17 @@ export async function chargerSuivi() {
         dureeRdvMinutes: entretien.dureeRdvMinutes,
         actif: entretien.actif,
         notes: entretien.notes,
-        elementId: element.id,
+        elementId: entretien.elementId,
         elementNom: element.nom,
         maisonNom: maison.nom,
         prestataireNom: prestataire.nom,
         prestataireTelephone: prestataire.telephone,
       })
       .from(entretien)
-      .innerJoin(element, eq(element.id, entretien.elementId))
-      .innerJoin(maison, eq(maison.id, element.maisonId))
+      .leftJoin(element, eq(element.id, entretien.elementId))
+      .innerJoin(maison, sql`${maison.id} = coalesce(${entretien.maisonId}, ${element.maisonId})`)
       .leftJoin(prestataire, eq(prestataire.id, entretien.prestataireId))
-      .where(and(suivis, eq(entretien.actif, true)))
+      .where(and(eq(maison.archivee, false), or(isNull(entretien.elementId), eq(element.archive, false)), eq(entretien.actif, true)))
       .orderBy(asc(entretien.echeance)),
     db
       .select({ id: element.id, nom: element.nom, maisonNom: maison.nom, finGarantie: element.finGarantie })
@@ -104,7 +104,7 @@ export async function calculerRappels(jour: string, derniere: string | null, opt
 
 // --- Mise en forme
 
-const ou = (e: { elementNom: string; maisonNom: string }) => `${e.elementNom}, ${e.maisonNom}`;
+const ou = (e: { elementNom: string | null; maisonNom: string }) => lieu(e);
 const aLHeure = (e: LigneEntretien) => (e.heureRdv ? ` à ${libelleHeure(e.heureRdv)}` : "");
 const action = (e: LigneEntretien) => (e.nature === "rdv" ? "rendez-vous à prendre" : "à faire");
 

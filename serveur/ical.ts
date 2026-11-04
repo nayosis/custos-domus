@@ -60,14 +60,15 @@ export async function genererIcal(maintenant = new Date(), { famille = false } =
   const { entretiens, garanties } = await chargerSuivi();
   const evenements: Evenement[] = [];
   for (const e of entretiens) {
-    const ou = `${e.elementNom} (${e.maisonNom})`;
+    const ou = e.elementNom ? `${e.elementNom} (${e.maisonNom})` : e.maisonNom;
+    const quoi = (debut: string) => `${debut} : ${e.titre}${e.elementNom ? ` – ${e.elementNom}` : ""}`;
     const contact = e.prestataireNom ? `\nPrestataire : ${e.prestataireNom}${e.prestataireTelephone ? `, ${e.prestataireTelephone}` : ""}` : "";
     if (e.etat === "rdv_pris" && e.dateRdv) {
       const debut = e.heureRdv ? instantLocal(e.dateRdv, e.heureRdv) : null;
       evenements.push({
         uid: `rdv-${e.id}`,
         jour: e.dateRdv,
-        resume: `RDV : ${e.titre} – ${e.elementNom}`,
+        resume: quoi("RDV"),
         description: `${ou}${contact}`,
         ...(debut ? { creneau: { debut, fin: new Date(debut.getTime() + (e.dureeRdvMinutes ?? 60) * 60_000) } } : { rappelVeille: true }),
       });
@@ -77,13 +78,13 @@ export async function genererIcal(maintenant = new Date(), { famille = false } =
       evenements.push({
         uid: `prendre-${e.id}`,
         jour: ajouter(e.echeance, -e.delaiAlerteJours, "jour"),
-        resume: `Prendre RDV : ${e.titre} – ${e.elementNom}`,
+        resume: quoi("Prendre RDV"),
         description: `${ou}, échéance le ${dateLisible(e.echeance)}${contact}`,
       });
     evenements.push({
       uid: `echeance-${e.id}`,
       jour: e.echeance,
-      resume: `${e.nature === "rdv" ? "Échéance" : "À faire"} : ${e.titre} – ${e.elementNom}`,
+      resume: quoi(e.nature === "rdv" ? "Échéance" : "À faire"),
       description: `${ou}${e.notes ? `\n${e.notes}` : ""}${contact}`,
     });
   }

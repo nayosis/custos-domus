@@ -3,22 +3,28 @@
  * Dates : chaînes « AAAA-MM-JJ ».
  */
 
-export type Nature = "tache" | "rdv";
+export type Nature = "tache" | "rdv" | "routine";
 export type Unite = "jour" | "semaine" | "mois" | "an";
 export type Ancrage = "realisation" | "fixe";
 
-export const NATURES: Record<Nature, string> = { tache: "Tâche", rdv: "Rendez-vous" };
+export const NATURES: Record<Nature, string> = { tache: "Tâche", rdv: "Rendez-vous", routine: "Routine" };
 export const UNITES: Record<Unite, { un: string; plusieurs: string }> = {
   jour: { un: "jour", plusieurs: "jours" },
   semaine: { un: "semaine", plusieurs: "semaines" },
   mois: { un: "mois", plusieurs: "mois" },
   an: { un: "an", plusieurs: "ans" },
 };
-export const estNature = (x: unknown): x is Nature => x === "tache" || x === "rdv";
+export const estNature = (x: unknown): x is Nature => x === "tache" || x === "rdv" || x === "routine";
 export const estUnite = (x: unknown): x is Unite => typeof x === "string" && Object.hasOwn(UNITES, x);
 
-/** Délai d'alerte par défaut : un rendez-vous se prend tôt (6 semaines), une tâche se fait vite (1 semaine). */
-export const DELAI_DEFAUT: Record<Nature, number> = { rdv: 42, tache: 7 };
+/**
+ * Délai d'alerte par défaut : un rendez-vous se prend tôt (6 semaines), une tâche se fait vite (1 semaine),
+ * une routine se rappelle le jour même.
+ */
+export const DELAI_DEFAUT: Record<Nature, number> = { rdv: 42, tache: 7, routine: 0 };
+
+/** Où se trouve une chose à faire : « Pompe à chaleur, Maison principale », ou la maison seule. */
+export const lieu = (e: { elementNom?: string | null; maisonNom: string }, separateur = ", ") => (e.elementNom ? `${e.elementNom}${separateur}${e.maisonNom}` : e.maisonNom);
 
 const enDate = (d: string) => {
   const [a, m, j] = d.slice(0, 10).split("-").map(Number);

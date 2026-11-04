@@ -67,15 +67,25 @@ export function migrer(base: Database, dossier: string) {
   const aFaire = readdirSync(dossier)
     .filter((f) => f.endsWith(".sql") && !faites.has(f))
     .sort();
-  for (const nom of aFaire) {
-    const instructions = readFileSync(join(dossier, nom), "utf8")
-      .split("--> statement-breakpoint")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    base.transaction(() => {
-      for (const sql of instructions) base.exec(sql);
-      base.query("INSERT INTO __migrations (nom) VALUES (?)").run(nom);
-    })();
+  if (!aFaire.length) return aFaire;
+  // Clés étrangères suspendues : une migration qui reconstruit une table (DROP puis renommage) déclencherait sinon
+  // les ON DELETE des autres tables (documents effacés en cascade…). Vérifiées à la fin de chaque migration.
+  base.exec("PRAGMA foreign_keys = OFF");
+  try {
+    for (const nom of aFaire) {
+      const instructions = readFileSync(join(dossier, nom), "utf8")
+        .split("--> statement-breakpoint")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      base.transaction(() => {
+        for (const sql of instructions) base.exec(sql);
+        const fautes = base.query("PRAGMA foreign_key_check").all();
+        if (fautes.length) throw new Error(`Migration ${nom} : ${fautes.length} référence(s) cassée(s) ${JSON.stringify(fautes.slice(0, 3))}`);
+        base.query("INSERT INTO __migrations (nom) VALUES (?)").run(nom);
+      })();
+    }
+  } finally {
+    base.exec("PRAGMA foreign_keys = ON");
   }
   return aFaire;
 }

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Layout } from "./components/Layout";
 import { SurOrdinateur } from "./components/SurOrdinateur";
 import { Accueil } from "./pages/Accueil";
+import { AFaire } from "./pages/AFaire";
 import { Elements } from "./pages/Elements";
 import { FicheElement } from "./pages/FicheElement";
 import { Maisons } from "./pages/Maisons";
@@ -55,6 +56,12 @@ export const accueilRoute = createRoute({
   component: Accueil,
   validateSearch: (s: Record<string, unknown>): { maison?: string } => (typeof s.maison === "string" ? { maison: s.maison } : {}),
 });
+export const aFaireRoute = createRoute({
+  getParentRoute: () => application,
+  path: "/a-faire",
+  component: AFaire,
+  validateSearch: (s: Record<string, unknown>): { maison?: string } => (typeof s.maison === "string" ? { maison: s.maison } : {}),
+});
 const maisons = createRoute({ getParentRoute: () => application, path: "/maisons", component: Maisons });
 export const elementsRoute = createRoute({
   getParentRoute: () => application,
@@ -70,7 +77,7 @@ const comptes = createRoute({ getParentRoute: () => application, path: "/comptes
 const journal = createRoute({ getParentRoute: () => application, path: "/journal", component: surOrdinateur(Journal, "Journal"), beforeLoad: reserveAdmin });
 
 export const router = createRouter({
-  routeTree: racine.addChildren([connexionRoute, lienRoute, application.addChildren([accueilRoute, maisons, elementsRoute, ficheElementRoute, prestataires, notificationsRoute, sauvegarde, comptes, journal])]),
+  routeTree: racine.addChildren([connexionRoute, lienRoute, application.addChildren([accueilRoute, aFaireRoute, maisons, elementsRoute, ficheElementRoute, prestataires, notificationsRoute, sauvegarde, comptes, journal])]),
   history: createBrowserHistory(),
 });
 

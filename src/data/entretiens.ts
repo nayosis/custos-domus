@@ -2,7 +2,7 @@ import { asc, eq } from "drizzle-orm";
 import { db, newId } from "../db/client";
 import { entretien, modeleEntretien, realisation, type Entretien } from "../db/schema";
 import { aujourdhui, lireDate } from "../lib/dates";
-import { ajouter, DELAI_DEFAUT, echeanceApresPassage, estNature, estRecurrent, estUnite, lireHeure, prochaineEcheance, type Unite } from "../lib/entretiens";
+import { ajouter, DELAI_DEFAUT, echeanceApresPassage, estNature, estRecurrent, estUnite, lireHeure, prochaineEcheance, type Nature, type Unite } from "../lib/entretiens";
 import { ErreurMetier } from "../../serveur/erreurs";
 import { verifierVersion, versionDe } from "./version";
 
@@ -24,7 +24,7 @@ function nettoyer(v: Saisie) {
     if (!r.titre) throw new ErreurMetier("Le titre est obligatoire.");
   }
   if (v.nature !== undefined) {
-    if (!estNature(v.nature)) throw new ErreurMetier("Nature inconnue : tâche ou rendez-vous.");
+    if (!estNature(v.nature)) throw new ErreurMetier("Nature inconnue : tâche, rendez-vous ou routine.");
     r.nature = v.nature;
   }
   if (v.intervalleValeur !== undefined || v.intervalleUnite !== undefined) {
@@ -49,13 +49,23 @@ function nettoyer(v: Saisie) {
 /** Bibliothèque d'entretiens types, par catégorie. */
 export const listeModeles = () => db.select().from(modeleEntretien).orderBy(asc(modeleEntretien.categorie), asc(modeleEntretien.titre));
 
+/** Rattachement : un élément, ou la maison directement — l'un ou l'autre. */
+export type Rattachement = { elementId: string; maisonId?: null } | { maisonId: string; elementId?: null };
+export function rattachement(v: { elementId?: string | null; maisonId?: string | null }) {
+  if (!!v.elementId === !!v.maisonId) throw new ErreurMetier("À rattacher à un élément ou à une maison.");
+  return { elementId: v.elementId || null, maisonId: v.maisonId || null };
+}
+
 /**
- * Nouvel entretien. Première échéance : celle donnée, sinon la « dernière réalisation » + intervalle
+ * Nouvelle chose à faire. Première échéance : celle donnée, sinon la « dernière réalisation » + intervalle
  * (la réalisation est alors consignée dans l'historique), sinon aujourd'hui.
+ * Une routine n'a pas de prestataire.
  */
-export async function creerEntretien(v: Saisie & { elementId: string; titre: string; derniereRealisation?: string | null }) {
+export async function creerEntretien(v: Saisie & Rattachement & { titre: string; derniereRealisation?: string | null }) {
+  const ou = rattachement(v);
   const valeurs = nettoyer({ nature: "tache", ...v });
-  const nature = valeurs.nature as "tache" | "rdv";
+  const nature = valeurs.nature as Nature;
+  if (nature === "routine") valeurs.prestataireId = null;
   const derniere = v.derniereRealisation ? date(v.derniereRealisation, "Dernière réalisation") : null;
   let echeance = valeurs.echeance;
   if (!echeance && derniere && estRecurrent(valeurs)) echeance = ajouter(derniere, valeurs.intervalleValeur!, valeurs.intervalleUnite as Unite);
@@ -63,7 +73,7 @@ export async function creerEntretien(v: Saisie & { elementId: string; titre: str
   await db.insert(entretien).values({
     ...valeurs,
     id,
-    elementId: v.elementId,
+    ...ou,
     titre: valeurs.titre!,
     nature,
     echeance: echeance ?? aujourdhui(),
@@ -72,7 +82,7 @@ export async function creerEntretien(v: Saisie & { elementId: string; titre: str
     actif: true,
   });
   if (derniere)
-    await db.insert(realisation).values({ id: newId(), elementId: v.elementId, entretienId: id, date: derniere, titre: valeurs.titre!, prestataireId: valeurs.prestataireId ?? null });
+    await db.insert(realisation).values({ id: newId(), ...ou, entretienId: id, date: derniere, titre: valeurs.titre!, prestataireId: valeurs.prestataireId ?? null });
   return id;
 }
 
@@ -136,7 +146,9 @@ const charger = async (id: string) => {
 export async function passerEcheance(id: string, v: { motif?: string | null } = {}) {
   const e = await charger(id);
   const occurrence = e.echeanceInitiale ?? e.echeance;
-  await db.insert(realisation).values({ id: newId(), elementId: e.elementId, entretienId: id, date: occurrence, titre: e.titre, note: v.motif?.trim() || null, passee: true });
+  await db
+    .insert(realisation)
+    .values({ id: newId(), elementId: e.elementId, maisonId: e.maisonId, entretienId: id, date: occurrence, titre: e.titre, note: v.motif?.trim() || null, passee: true });
   const suivante = echeanceApresPassage(e, aujourdhui());
   await db
     .update(entretien)
@@ -157,16 +169,28 @@ export async function reporterEcheance(id: string, v: { date: string }) {
 }
 
 /**
- * L'entretien est fait : consigné dans l'historique, puis échéance suivante (récurrent)
- * ou clôture (ponctuel). Renvoie l'identifiant de la réalisation (pour y joindre des documents).
+ * C'est fait : consigné dans l'historique, puis échéance suivante (récurrent) ou clôture (ponctuel).
+ * Date du jour par défaut (routine : « Fait » en un geste ; ni coût ni prestataire).
+ * Renvoie l'identifiant de la réalisation (pour y joindre des documents).
  */
-export async function realiserEntretien(id: string, v: { date: string; note?: string | null; cout?: number | null; prestataireId?: string | null }) {
+export async function realiserEntretien(id: string, v: { date?: string | null; note?: string | null; cout?: number | null; prestataireId?: string | null } = {}) {
   const e = await charger(id);
-  const jour = date(v.date, "Date");
-  if (v.cout != null && (!Number.isFinite(v.cout) || v.cout < 0)) throw new ErreurMetier("Coût invalide.");
-  const prestataireId = v.prestataireId === undefined ? e.prestataireId : v.prestataireId || null;
+  const jour = v.date ? date(v.date, "Date") : aujourdhui();
+  const routine = e.nature === "routine";
+  if (!routine && v.cout != null && (!Number.isFinite(v.cout) || v.cout < 0)) throw new ErreurMetier("Coût invalide.");
+  const prestataireId = routine ? null : v.prestataireId === undefined ? e.prestataireId : v.prestataireId || null;
   const realisationId = newId();
-  await db.insert(realisation).values({ id: realisationId, elementId: e.elementId, entretienId: id, date: jour, titre: e.titre, note: v.note?.trim() || null, cout: v.cout ?? null, prestataireId });
+  await db.insert(realisation).values({
+    id: realisationId,
+    elementId: e.elementId,
+    maisonId: e.maisonId,
+    entretienId: id,
+    date: jour,
+    titre: e.titre,
+    note: v.note?.trim() || null,
+    cout: routine ? null : (v.cout ?? null),
+    prestataireId,
+  });
   const suivante = prochaineEcheance(e, jour);
   await db
     .update(entretien)

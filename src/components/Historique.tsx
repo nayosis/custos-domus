@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ActionIcon, Anchor, Badge, Button, Card, Group, Menu, Stack, Text, Timeline, Title } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { IconCheck, IconDots, IconHistory, IconPaperclip, IconPencil, IconPlayerSkipForward, IconPlus, IconTool, IconTrash } from "@tabler/icons-react";
+import type { Rattachement } from "../data/entretiens";
 import { supprimerRealisation } from "../data/realisations";
 import type { Document, Realisation } from "../db/schema";
 import { dateLisible, euros } from "../lib/dates";
@@ -12,10 +13,10 @@ import { ModalRealisation, type Cible } from "./ModalRealisation";
 export type LigneHistorique = Realisation & { prestataireNom: string | null; documents: Document[] };
 
 /**
- * Ce qui a été fait sur l'élément, du plus récent au plus ancien : entretiens réalisés et interventions,
- * et en gris les échéances passées volontairement (avec leur motif).
+ * Ce qui a été fait sur l'élément (ou la maison), du plus récent au plus ancien : choses à faire réalisées et
+ * interventions, et en gris les échéances passées volontairement (avec leur motif).
  */
-export function Historique({ elementId, historique }: { elementId: string; historique: LigneHistorique[] }) {
+export function Historique({ ou, historique }: { ou: Rattachement; historique: LigneHistorique[] }) {
   // On garde l'identifiant : la ligne affichée dans la fenêtre suit les données (pièces jointes retirées…).
   const [edition, setEdition] = useState<string | "intervention" | null>(null);
   const [apercu, setApercu] = useState<Document | null>(null);
@@ -56,7 +57,7 @@ export function Historique({ elementId, historique }: { elementId: string; histo
 
       {historique.length === 0 ? (
         <Text size="sm" c="dimmed" py="md" ta="center">
-          Les entretiens faits s'inscrivent ici. Une panne, une réparation ? Consignez-la avec sa facture.
+          Ce qui est fait s'inscrit ici. Une panne, une réparation ? Consignez-la avec sa facture.
         </Text>
       ) : (
         <Timeline bulletSize={22} lineWidth={2} color="brique" active={historique.length}>
@@ -131,7 +132,7 @@ export function Historique({ elementId, historique }: { elementId: string; histo
         </Timeline>
       )}
 
-      <ModalRealisation elementId={elementId} cible={cible} onClose={() => setEdition(null)} />
+      <ModalRealisation ou={ou} cible={cible} onClose={() => setEdition(null)} />
       <Apercu doc={apercu} onClose={() => setApercu(null)} />
     </Card>
   );
