@@ -124,8 +124,8 @@ export const entretien = sqliteTable(
     kmEcheance: integer("km_echeance"),
     echeanceTemps: text("echeance_temps"),
     /**
-     * Mission confiée aux enfants : points gagnés (vide : pas une mission), et l'enfant dont c'est le tour
-     * (ceux qui se la partagent, dans l'ordre, sont dans mission_tour).
+     * Mission confiée aux enfants : points gagnés (vide : pas une mission), et l'enfant s'il est seul
+     * (vide si elle est partagée ; tous ceux à qui elle est confiée sont dans mission_tour).
      */
     points: integer("points"),
     enfantId: text("enfant_id").references((): AnySQLiteColumn => enfant.id, { onDelete: "set null" }),
@@ -238,7 +238,7 @@ export const enfant = sqliteTable("enfant", {
   ...tracabilite(),
 });
 
-/** Qui se partage une mission, et dans quel ordre (un seul enfant : mission attribuée ; plusieurs : à tour de rôle). */
+/** À qui une mission est confiée (un seul enfant : la sienne ; plusieurs : partagée, le premier qui la fait gagne les points). */
 export const missionTour = sqliteTable(
   "mission_tour",
   {

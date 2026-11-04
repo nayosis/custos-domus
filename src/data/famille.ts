@@ -9,7 +9,7 @@ import { aujourdhui } from "../lib/dates";
 import { ECHECS_PIN_MAX, OBJECTIF_DEFAUT } from "../lib/famille";
 import { ErreurMetier } from "../../serveur/erreurs";
 import { hacherPin } from "../../serveur/famille";
-import { compteDe, reparerMissions, tourDe as tourDeMission, validerAutomatiquement } from "../../serveur/missions";
+import { compteDe, reparerMissions, enfantsMission as enfantsDeMission, validerAutomatiquement } from "../../serveur/missions";
 import { supprimerSessionsEnfant } from "../../serveur/comptes";
 import { utilisateurCourant } from "../../serveur/tracabilite";
 
@@ -39,8 +39,8 @@ async function prenomLibre(prenom: string, sauf?: string) {
 export const listeEnfants = () =>
   db.select({ id: enfant.id, prenom: enfant.prenom, actif: enfant.actif }).from(enfant).orderBy(desc(enfant.actif), asc(enfant.prenom));
 
-/** Les enfants d'une mission, dans l'ordre du tour. */
-export const tourDe = (entretienId: string) => tourDeMission(entretienId);
+/** Les enfants à qui une mission est confiée. */
+export const enfantsMission = (entretienId: string) => enfantsDeMission(entretienId);
 
 const ou = sql<string | null>`coalesce(${element.nom}, ${maison.nom})`;
 
@@ -89,7 +89,7 @@ export async function famille() {
         ...(await compteDe(e.id, jour)),
       })),
     ),
-    missions: missions.map((m) => ({ ...m, tour: tours.filter((t) => t.entretienId === m.id).map((t) => t.enfantId) })),
+    missions: missions.map((m) => ({ ...m, enfants: tours.filter((t) => t.entretienId === m.id).map((t) => t.enfantId) })),
     aValider,
     recentes,
     demandes,
@@ -107,7 +107,7 @@ export async function creerEnfant(v: { prenom: string; pin: string; objectifSema
   return id;
 }
 
-/** Prénom, objectif ; désactivé : ne peut plus se connecter (ses sessions sont fermées), passe son tour. */
+/** Prénom, objectif ; désactivé : ne peut plus se connecter (ses sessions sont fermées). */
 export async function majEnfant(id: string, v: { prenom?: string; objectifSemaine?: number; actif?: boolean }) {
   const patch: Partial<typeof enfant.$inferInsert> = {};
   if (v.prenom !== undefined) {
@@ -128,7 +128,7 @@ export async function changerPin(id: string, v: { pin: string }) {
   return id;
 }
 
-/** Supprime le profil, ses points et ses demandes ; ses missions passent aux autres (ou ne sont plus des missions). */
+/** Supprime le profil, ses points et ses demandes ; ses missions partagées restent aux autres (ou ne sont plus des missions). */
 export async function supprimerEnfant(id: string) {
   await db.update(realisation).set({ enfantId: null, points: null, validation: null, avant: null }).where(eq(realisation.enfantId, id));
   await db.delete(enfant).where(eq(enfant.id, id));

@@ -6,7 +6,7 @@ import { ajouter, DELAI_DEFAUT, echeanceApresPassage, estNature, estRecurrent, e
 import { ErreurMetier } from "../../serveur/erreurs";
 import { ajouterReleve, dernierKm, recalculerKm } from "../../serveur/kilometrage";
 import { verifierVersion, versionDe } from "./version";
-import { definirMission, tourSuivant, type SaisieMission } from "../../serveur/missions";
+import { definirMission, type SaisieMission } from "../../serveur/missions";
 
 type Saisie = Partial<
   Pick<
@@ -81,7 +81,7 @@ export async function creerEntretien(
       titre: string;
       derniereRealisation?: string | null;
       /** Véhicule : kilométrage la dernière fois. */ kmDerniere?: number | null;
-      /** Confiée aux enfants (à tour de rôle s'ils sont plusieurs). */ mission?: SaisieMission;
+      /** Confiée aux enfants (partagée s'ils sont plusieurs : le premier qui la fait). */ mission?: SaisieMission;
     },
 ) {
   const ou = rattachement(v);
@@ -207,7 +207,6 @@ export async function passerEcheance(id: string, v: { motif?: string | null } = 
       .set({ ...SANS_RDV, echeanceInitiale: null, echeanceTemps: temps, kmEcheance, echeance: temps ?? e.echeance })
       .where(eq(entretien.id, id));
     await recalculerKm(e.elementId!);
-    await tourSuivant(id);
     return (await charger(id)).echeance;
   }
   const suivante = echeanceApresPassage(e, aujourdhui());
@@ -215,7 +214,6 @@ export async function passerEcheance(id: string, v: { motif?: string | null } = 
     .update(entretien)
     .set({ ...SANS_RDV, echeanceInitiale: null, ...(suivante ? { echeance: suivante } : { actif: false }) })
     .where(eq(entretien.id, id));
-  await tourSuivant(id);
   return suivante;
 }
 
@@ -270,7 +268,6 @@ export async function realiserEntretien(
       .set({ ...SANS_RDV, echeanceInitiale: null, echeanceTemps: temps, kmEcheance: kmFait + e.intervalleKm, echeance: temps ?? e.echeance })
       .where(eq(entretien.id, id));
     await recalculerKm(e.elementId!);
-    await tourSuivant(id);
     return realisationId;
   }
   const suivante = prochaineEcheance(e, jour);
@@ -278,6 +275,5 @@ export async function realiserEntretien(
     .update(entretien)
     .set({ ...SANS_RDV, echeanceInitiale: null, ...(suivante ? { echeance: suivante } : { actif: false }) })
     .where(eq(entretien.id, id));
-  await tourSuivant(id);
   return realisationId;
 }

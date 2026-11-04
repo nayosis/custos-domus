@@ -1,5 +1,5 @@
 /*
- * Missions confiées aux enfants : qui s'en charge (à tour de rôle), points, validation par un parent.
+ * Missions confiées aux enfants : à qui elles sont confiées (un enfant, ou partagées), points, validation par un parent.
  * Côté serveur uniquement (appelé par les fonctions de src/data/ et par l'espace des enfants).
  */
 import { and, asc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
@@ -11,13 +11,16 @@ import { ErreurMetier } from "./erreurs";
 
 export type SaisieMission = { enfants: string[]; points?: number | null } | null;
 
-/** Les enfants d'une mission, dans l'ordre du tour. */
-export const tourDe = async (entretienId: string) =>
+/** Les enfants à qui une mission est confiée. */
+export const enfantsMission = async (entretienId: string) =>
   (await db.select({ enfantId: missionTour.enfantId }).from(missionTour).where(eq(missionTour.entretienId, entretienId)).orderBy(asc(missionTour.ordre))).map((t) => t.enfantId);
 
+/** Un seul enfant : la mission est la sienne (entretien.enfantId) ; plusieurs : partagée (vide), le premier qui la fait gagne les points. */
+const titulaire = (enfants: string[]) => (enfants.length === 1 ? enfants[0] : null);
+
 /**
- * Fait de cette chose à faire une mission (un enfant : attribuée ; plusieurs : à tour de rôle), ou plus du tout (null).
- * Le tour en cours est gardé si son enfant fait toujours partie de la liste.
+ * Fait de cette chose à faire une mission, confiée à un ou plusieurs enfants, ou plus du tout (null).
+ * Partagée entre plusieurs : n'importe lequel peut la faire, celui qui la fait gagne les points.
  */
 export async function definirMission(entretienId: string, m: SaisieMission) {
   const enfants = [...new Set(m?.enfants ?? [])];
@@ -31,43 +34,25 @@ export async function definirMission(entretienId: string, m: SaisieMission) {
   const connus = await db.select({ id: enfant.id }).from(enfant).where(inArray(enfant.id, enfants));
   if (connus.length !== enfants.length) throw new ErreurMetier("Enfant inconnu.");
   await db.insert(missionTour).values(enfants.map((enfantId, ordre) => ({ entretienId, enfantId, ordre })));
-  const [e] = await db.select({ enfantId: entretien.enfantId }).from(entretien).where(eq(entretien.id, entretienId));
-  await db
-    .update(entretien)
-    .set({ points: pts, enfantId: e?.enfantId && enfants.includes(e.enfantId) ? e.enfantId : enfants[0] })
-    .where(eq(entretien.id, entretienId));
+  await db.update(entretien).set({ points: pts, enfantId: titulaire(enfants) }).where(eq(entretien.id, entretienId));
 }
 
-/** Après une occurrence (faite ou passée) : à tour de rôle, la mission passe à l'enfant suivant (actif). */
-export async function tourSuivant(entretienId: string) {
-  const [e] = await db.select({ enfantId: entretien.enfantId, points: entretien.points }).from(entretien).where(eq(entretien.id, entretienId));
-  if (!e || e.points == null) return;
-  const tour = await db
-    .select({ enfantId: missionTour.enfantId, actif: enfant.actif })
+/** Est-ce une mission de cet enfant (la sienne, ou partagée avec lui) ? */
+export async function missionDe(entretienId: string, enfantId: string) {
+  const [t] = await db
+    .select({ enfantId: missionTour.enfantId })
     .from(missionTour)
-    .innerJoin(enfant, eq(enfant.id, missionTour.enfantId))
-    .where(eq(missionTour.entretienId, entretienId))
-    .orderBy(asc(missionTour.ordre));
-  if (tour.length < 2) return;
-  const i = tour.findIndex((t) => t.enfantId === e.enfantId);
-  for (let k = 1; k <= tour.length; k++) {
-    const suivant = tour[(Math.max(i, 0) + k) % tour.length];
-    if (suivant.actif) {
-      await db.update(entretien).set({ enfantId: suivant.enfantId }).where(eq(entretien.id, entretienId));
-      return;
-    }
-  }
+    .where(and(eq(missionTour.entretienId, entretienId), eq(missionTour.enfantId, enfantId)));
+  return !!t;
 }
 
-/** Enfant retiré d'une mission (supprimé) : le tour passe au premier qui reste ; plus personne, plus une mission. */
+/** Enfant supprimé : ses missions restent aux autres (seul restant : elle devient la sienne) ; plus personne, plus une mission. */
 export async function reparerMissions() {
-  const orphelines = await db.select({ id: entretien.id }).from(entretien).where(and(isNotNull(entretien.points), sql`${entretien.enfantId} is null`));
-  for (const { id } of orphelines) {
-    const tour = await tourDe(id);
-    await db
-      .update(entretien)
-      .set(tour.length ? { enfantId: tour[0] } : { points: null })
-      .where(eq(entretien.id, id));
+  const missions = await db.select({ id: entretien.id, enfantId: entretien.enfantId }).from(entretien).where(isNotNull(entretien.points));
+  for (const { id, enfantId } of missions) {
+    const enfants = await enfantsMission(id);
+    if (!enfants.length) await db.update(entretien).set({ points: null, enfantId: null }).where(eq(entretien.id, id));
+    else if (titulaire(enfants) !== enfantId) await db.update(entretien).set({ enfantId: titulaire(enfants) }).where(eq(entretien.id, id));
   }
 }
 

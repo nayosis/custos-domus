@@ -23,21 +23,21 @@ import {
 import { ecrire } from "../lib/query";
 import { km, libelleKm } from "../lib/vehicules";
 import { ChampDate, ChampPrestataire } from "./Champs";
-import { listeEnfants, tourDe } from "../data/famille";
+import { enfantsMission, listeEnfants } from "../data/famille";
 import { POINTS_DEFAUT } from "../lib/famille";
 import { ModalRealisation } from "./ModalRealisation";
 
 export type LigneEntretien = Entretien & { prestataireNom: string | null };
 
 /** Icône d'une chose à faire selon sa nature. */
-/** Mission confiée à un enfant : son prénom (celui dont c'est le tour) et les points. */
+/** Mission : le prénom de l'enfant (« Enfants » si elle est partagée, ou de celui qui l'a faite) et les points. */
 export function BadgeMission({ e, suffixe }: { e: { points: number | null; enfantId: string | null }; suffixe?: string }) {
   const { data: enfants = [] } = useQuery({ queryKey: ["enfants"], queryFn: () => listeEnfants(), enabled: e.points != null });
   if (e.points == null) return null;
   const prenom = enfants.find((x) => x.id === e.enfantId)?.prenom;
   return (
     <Badge size="sm" variant="outline" color="brique" leftSection={<IconUser size={11} />}>
-      {prenom ?? "Mission"} · {e.points} pts{suffixe ? ` · ${suffixe}` : ""}
+      {prenom ?? "Enfants"} · {e.points} pts{suffixe ? ` · ${suffixe}` : ""}
     </Badge>
   );
 }
@@ -147,13 +147,13 @@ const depuis = (e: Entretien): Saisie => ({
 });
 
 /**
- * Confier aux enfants : un enfant (mission attribuée) ou plusieurs (à tour de rôle, dans l'ordre choisi), et les points.
- * `mission` vaut undefined tant que le tour d'une mission existante n'est pas chargé (rien n'est alors envoyé).
+ * Confier aux enfants : un enfant (la sienne) ou plusieurs (partagée : le premier qui la fait gagne les points), et les points.
+ * `mission` vaut undefined tant que les enfants d'une mission existante n'est pas chargé (rien n'est alors envoyé).
  */
 function useMission(entretien: Entretien | null, opened: boolean) {
   const { data: enfants = [] } = useQuery({ queryKey: ["enfants"], queryFn: () => listeEnfants(), enabled: opened });
   const estMission = !!entretien && entretien.points != null;
-  const { data: tour } = useQuery({ queryKey: ["tour", entretien?.id], queryFn: () => tourDe(entretien!.id), enabled: opened && estMission });
+  const { data: tour } = useQuery({ queryKey: ["mission", entretien?.id], queryFn: () => enfantsMission(entretien!.id), enabled: opened && estMission });
   const [choix, setChoix] = useState<string[] | null>(null);
   const [pts, setPts] = useState<number | string>(POINTS_DEFAUT);
   const [cle, setCle] = useState<string | null>(null);
@@ -172,7 +172,7 @@ function useMission(entretien: Entretien | null, opened: boolean) {
         <Stack gap="xs">
           <MultiSelect
             label="Confier aux enfants"
-            description={valeur.length > 1 ? "À tour de rôle, dans cet ordre" : "Un enfant : attribuée ; plusieurs : à tour de rôle"}
+            description={valeur.length > 1 ? "Partagée : n'importe lequel peut la faire, celui qui la fait gagne les points" : "Plusieurs : partagée, le premier qui la fait gagne les points"}
             placeholder={valeur.length ? undefined : "Personne : ce n'est pas une mission"}
             data={enfants.filter((e) => e.actif || valeur.includes(e.id)).map((e) => ({ value: e.id, label: e.prenom }))}
             value={valeur}

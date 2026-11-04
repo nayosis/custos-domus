@@ -136,6 +136,7 @@ function Missions({ e, agir }: { e: Espace; agir: (chemin: string, message: stri
             <Text size="xs" c={m.enRetard ? "red" : "dimmed"}>
               {libelleJour(m.echeance)}
               {m.ou ? ` · ${m.ou}` : ""} · {points(m.points)}
+              {m.avec.length > 0 && ` · avec ${m.avec.join(", ")} : le premier qui la fait`}
             </Text>
             {m.notes && (
               <Text size="xs" c="dimmed" style={{ whiteSpace: "pre-line" }}>

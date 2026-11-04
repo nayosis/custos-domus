@@ -2,16 +2,16 @@
  * Espace des enfants : connexion par code PIN, leurs missions, leurs points, leurs récompenses.
  * Un enfant n'appelle jamais les fonctions RPC : seulement les routes /api/enfant (serveur/routesEnfants.ts).
  */
-import { and, asc, desc, eq, isNotNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, lte, ne, or, sql } from "drizzle-orm";
 import { db, newId } from "../src/db/client";
-import { echange, element, enfant, entretien, maison, realisation, recompense } from "../src/db/schema";
+import { echange, element, enfant, entretien, maison, missionTour, realisation, recompense } from "../src/db/schema";
 import { aujourdhui } from "../src/lib/dates";
 import { ajouter } from "../src/lib/entretiens";
 import { ECHECS_PIN_MAX, faisable, pinValide } from "../src/lib/famille";
 import { realiserEntretien } from "../src/data/entretiens";
 import { envoyerPush } from "./envoi";
 import { ErreurMetier } from "./erreurs";
-import { compteDe, validerAutomatiquement } from "./missions";
+import { compteDe, missionDe, validerAutomatiquement } from "./missions";
 import { abonnementsDe, destinataires } from "./reglages";
 
 export const hacherPin = (pin: unknown) => {
@@ -68,7 +68,7 @@ export async function espaceEnfant(enfantId: string) {
       .leftJoin(maison, sql`${maison.id} = coalesce(${entretien.maisonId}, ${element.maisonId})`)
       .where(
         and(
-          eq(entretien.enfantId, enfantId),
+          inArray(entretien.id, db.select({ id: missionTour.entretienId }).from(missionTour).where(eq(missionTour.enfantId, enfantId))),
           eq(entretien.actif, true),
           isNotNull(entretien.points),
           lte(entretien.echeance, ajouter(jour, 30, "jour")),
@@ -76,10 +76,11 @@ export async function espaceEnfant(enfantId: string) {
         ),
       )
       .orderBy(asc(entretien.echeance), asc(entretien.titre)),
+    // Faites aujourd'hui, par lui ou (mission partagée) par un autre enfant.
     db
       .select({ entretienId: realisation.entretienId })
       .from(realisation)
-      .where(and(eq(realisation.enfantId, enfantId), eq(realisation.date, jour))),
+      .where(and(isNotNull(realisation.enfantId), eq(realisation.date, jour))),
     db
       .select({ id: realisation.id, titre: realisation.titre, date: realisation.date, points: realisation.points, validation: realisation.validation })
       .from(realisation)
@@ -96,11 +97,26 @@ export async function espaceEnfant(enfantId: string) {
     compteDe(enfantId, jour),
   ]);
   const faites = new Set(faitesAujourdhui.map((f) => f.entretienId));
+  // Missions partagées : avec qui.
+  const avec = missions.length
+    ? await db
+        .select({ entretienId: missionTour.entretienId, prenom: enfant.prenom })
+        .from(missionTour)
+        .innerJoin(enfant, eq(enfant.id, missionTour.enfantId))
+        .where(and(inArray(missionTour.entretienId, missions.map((m) => m.id)), ne(missionTour.enfantId, enfantId), eq(enfant.actif, true)))
+        .orderBy(asc(missionTour.ordre))
+    : [];
   return {
     prenom: e.prenom,
     objectifSemaine: e.objectifSemaine,
     ...compte,
-    missions: missions.map((m) => ({ ...m, points: m.points ?? 0, faisable: faisable(m.echeance, jour, faites.has(m.id)), enRetard: m.echeance < jour })),
+    missions: missions.map((m) => ({
+      ...m,
+      points: m.points ?? 0,
+      avec: avec.filter((a) => a.entretienId === m.id).map((a) => a.prenom),
+      faisable: faisable(m.echeance, jour, faites.has(m.id)),
+      enRetard: m.echeance < jour,
+    })),
     historique,
     recompenses,
     demandes,
@@ -117,18 +133,20 @@ function prevenirParents(titre: string, corps: string) {
 }
 
 /**
- * L'enfant a fait sa mission : consignée (points à valider par un parent), échéance suivante, tour suivant.
+ * L'enfant a fait sa mission : consignée (points à valider par un parent), échéance suivante.
+ * Partagée : celui qui la fait gagne les points, elle est faite pour tous.
  * L'état d'avant est gardé : un parent qui refuse le remet en place.
  */
 export async function faireMission(enfantId: string, entretienId: string) {
   const e = await enfantActif(enfantId);
   const [m] = await db.select().from(entretien).where(eq(entretien.id, entretienId));
-  if (!e || !m || m.enfantId !== enfantId || m.points == null || !m.actif) throw new ErreurMetier("Cette mission n'est pas (ou plus) la tienne.", 404);
+  if (!e || !m || m.points == null || !m.actif || !(await missionDe(entretienId, enfantId))) throw new ErreurMetier("Cette mission n'est pas (ou plus) la tienne.", 404);
   const jour = aujourdhui();
+  // Une fois par jour, quel que soit l'enfant qui l'a faite (mission partagée).
   const [dejaFaite] = await db
     .select({ id: realisation.id })
     .from(realisation)
-    .where(and(eq(realisation.entretienId, entretienId), eq(realisation.enfantId, enfantId), eq(realisation.date, jour)));
+    .where(and(eq(realisation.entretienId, entretienId), isNotNull(realisation.enfantId), eq(realisation.date, jour)));
   if (!faisable(m.echeance, jour, !!dejaFaite)) throw new ErreurMetier(dejaFaite ? "Déjà faite aujourd'hui." : "Pas encore : c'est pour plus tard.");
   const avant = JSON.stringify({
     echeance: m.echeance,

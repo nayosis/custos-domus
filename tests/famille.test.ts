@@ -125,25 +125,30 @@ describe("missions", () => {
     expect((await fait(ca, deBruno)).status).toBe(404);
   });
 
-  test("à tour de rôle : la mission passe à l'autre, faite ou passée ; un enfant désactivé passe son tour", async () => {
+  test("partagée : chacun la voit, le premier qui la fait gagne les points, elle est faite pour tous", async () => {
     const a = await ok("creerEnfant", { prenom: "Côme", pin: "1111" });
     const b = await ok("creerEnfant", { prenom: "Dina", pin: "2222" });
-    const c = await ok("creerEnfant", { prenom: "Eli", pin: "3333" });
-    const id = await mission([a, b, c], { titre: "Vider le lave-vaisselle" });
-    expect(await ok("tourDe", id)).toEqual([a, b, c]);
-    expect((await missionDe(id)).enfantId).toBe(a);
+    const id = await mission([a, b], { titre: "Vider le lave-vaisselle", points: 12, echeance: ajouter(jour, -1, "jour") });
+    expect(await ok("enfantsMission", id)).toEqual([a, b]);
+    expect(await missionDe(id)).toMatchObject({ enfantId: null, enfants: [a, b] });
     const { cookie: ca } = await connexionEnfant("Côme", "1111");
-    await fait(ca, id);
-    expect((await missionDe(id)).enfantId).toBe(b);
-    await ok("passerEcheance", id);
-    expect((await missionDe(id)).enfantId).toBe(c);
-    await ok("majEnfant", a, { actif: false });
-    await ok("realiserEntretien", id); // fait par un parent : pas de points, mais le tour avance
-    expect((await missionDe(id)).enfantId).toBe(b);
+    const { cookie: cb } = await connexionEnfant("Dina", "2222");
+    const vue = (await espace(cb)).missions.find((m: { id: string }) => m.id === id);
+    expect(vue).toMatchObject({ faisable: true, avec: ["Côme"] });
+
+    // Dina la fait : ses points ; pour Côme, elle est faite (échéance suivante, plus rien à cocher aujourd'hui).
+    const apres = await (await fait(cb, id)).json();
+    expect(apres.semaine.enAttente).toBe(12);
+    expect((await espace(ca)).semaine.enAttente).toBe(0);
+    expect((await espace(ca)).missions.find((m: { id: string }) => m.id === id).faisable).toBe(false);
+    expect((await fait(ca, id)).status).toBe(400);
+    // Toujours partagée.
+    expect(await missionDe(id)).toMatchObject({ enfantId: null, enfants: [a, b] });
+
     // Plus une mission.
     await ok("majEntretien", id, { mission: null });
     expect(await missionDe(id)).toBeUndefined();
-    expect(await ok("tourDe", id)).toEqual([]);
+    expect(await ok("enfantsMission", id)).toEqual([]);
   });
 
   test("validation par un parent, ou d'office après 48 h ; refus : aucun point, la mission revient comme avant", async () => {
@@ -164,10 +169,10 @@ describe("missions", () => {
     expect(await refuse("validerMission", r1.id)).toBe(400);
     // Une validation oubliée : validée d'office au bout de 48 h.
     baseCourante().query("UPDATE realisation SET cree_le = datetime('now', '-49 hours') WHERE id = ?").run(r2.id);
-    // Refusée : la mission à tour de rôle revient à Fanny, à la même échéance.
-    expect((await missionDe(m3)).enfantId).toBe(b);
+    // Refusée : la mission partagée revient, à la même échéance, et redevient faisable pour les deux.
+    expect((await missionDe(m3)).echeance).toBe(ajouter(jour, 1, "semaine"));
     await ok("refuserMission", r3.id, { motif: "Pas fait" });
-    expect(await missionDe(m3)).toMatchObject({ enfantId: a, echeance: jour });
+    expect(await missionDe(m3)).toMatchObject({ enfantId: null, echeance: jour });
 
     const e = await espace(ca);
     expect(e.semaine).toMatchObject({ validees: 30, enAttente: 0 });
@@ -183,7 +188,7 @@ describe("missions", () => {
     const id = await mission([a, b]);
     const seul = await mission([a]);
     await ok("supprimerEnfant", a);
-    expect(await missionDe(id)).toMatchObject({ enfantId: b, tour: [b] });
+    expect(await missionDe(id)).toMatchObject({ enfantId: b, enfants: [b] });
     expect(await missionDe(seul)).toBeUndefined();
   });
 });

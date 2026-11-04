@@ -90,9 +90,9 @@ les voitures, et les enfants à qui confier des choses. Décisions prises (novem
    sur `/enfant`, avec un cookie à part (`custos_enfant`, sessions dans comptes.db) : 30 jours sur leur téléphone, ou
    15 minutes sans rien faire (tablette partagée, prénoms retenus sur l'appareil). Un enfant n'a accès qu'à
    `/api/enfant/*`, jamais aux fonctions RPC. **Mission** = une chose à faire avec des points (10 par défaut) et un ou
-   plusieurs enfants (`mission_tour`, dans l'ordre) : plusieurs = **à tour de rôle** (le tour avance à chaque
-   occurrence, faite ou passée, en sautant les profils désactivés). L'enfant coche « C'est fait » au plus deux jours
-   avant l'échéance, une fois par jour : réalisation à valider (`validation`, `points`, état d'avant gardé), push aux
+   plusieurs enfants (`mission_tour`) : un seul = la sienne (`entretien.enfant_id`) ; plusieurs = **partagée**
+   (`enfant_id` vide) : chacun la voit, le premier qui la fait gagne les points, elle est faite pour tous. L'enfant coche « C'est fait » au plus deux jours
+   avant l'échéance, une fois par jour (tous enfants confondus) : réalisation à valider (`validation`, `points`, état d'avant gardé), push aux
    parents. Validée par n'importe quel parent, d'office au bout de 48 h ; **refusée** : aucun point, la mission revient
    comme avant si rien n'a été fait depuis. Un parent qui coche « Fait » ne donne de points à personne. Objectif de
    points par semaine (du lundi au dimanche) ; **récompenses** définies par les parents, demandées par l'enfant (points

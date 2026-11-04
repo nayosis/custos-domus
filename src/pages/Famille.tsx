@@ -4,7 +4,7 @@ import {
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import {
-  IconCheck, IconDots, IconGift, IconKey, IconLock, IconPencil, IconPlayerPause, IconPlayerPlay, IconPlus, IconRepeat, IconTrash, IconUsers, IconX,
+  IconCheck, IconDots, IconGift, IconKey, IconLock, IconPencil, IconPlayerPause, IconPlayerPlay, IconPlus, IconTrash, IconUsers, IconX,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -217,14 +217,14 @@ function EnAttente({ d }: { d: Donnees }) {
 }
 
 function CarteEnfant({ e, d, onModifier, onCode }: { e: Enfant; d: Donnees; onModifier: () => void; onCode: () => void }) {
-  const missions = d.missions.filter((m) => m.enfantId === e.id);
-  const partagees = d.missions.filter((m) => m.enfantId !== e.id && m.tour.includes(e.id));
+  const missions = d.missions.filter((m) => m.enfants.includes(e.id));
+  const prenom = (id: string) => d.enfants.find((x) => x.id === id)?.prenom;
   const supprimer = () =>
     modals.openConfirmModal({
       title: `Supprimer ${e.prenom} ?`,
       children: (
         <Text size="sm">
-          Ses points et ses demandes sont effacés ; ses missions passent aux autres enfants (ou redeviennent de simples choses à faire). Pour l'arrêter sans rien perdre,
+          Ses points et ses demandes sont effacés ; ses missions partagées restent aux autres enfants, les siennes seules redeviennent de simples choses à faire. Pour l'arrêter sans rien perdre,
           désactivez plutôt le profil.
         </Text>
       ),
@@ -262,7 +262,7 @@ function CarteEnfant({ e, d, onModifier, onCode }: { e: Enfant; d: Donnees; onMo
               Nouveau code
             </Menu.Item>
             <Menu.Item leftSection={e.actif ? <IconPlayerPause size={14} /> : <IconPlayerPlay size={14} />} onClick={() => ecrire(() => majEnfant(e.id, { actif: !e.actif }))}>
-              {e.actif ? "Désactiver (passe son tour)" : "Réactiver"}
+              {e.actif ? "Désactiver" : "Réactiver"}
             </Menu.Item>
             <Menu.Divider />
             <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={supprimer}>
@@ -288,7 +288,11 @@ function CarteEnfant({ e, d, onModifier, onCode }: { e: Enfant; d: Donnees; onMo
       )}
       {missions.map((m) => (
         <Group key={m.id} gap={6} wrap="nowrap" mt={4}>
-          {m.tour.length > 1 && <IconRepeat size={14} color="var(--mantine-color-dimmed)" aria-label="À tour de rôle" />}
+          {m.enfants.length > 1 && (
+            <Tooltip label={`Partagée avec ${m.enfants.filter((x) => x !== e.id).map(prenom).filter(Boolean).join(", ")} : le premier qui la fait`}>
+              <IconUsers size={14} color="var(--mantine-color-dimmed)" aria-label="Partagée" style={{ flexShrink: 0 }} />
+            </Tooltip>
+          )}
           <Text size="sm" truncate style={{ flex: 1 }}>
             {m.titre}
           </Text>
@@ -297,11 +301,6 @@ function CarteEnfant({ e, d, onModifier, onCode }: { e: Enfant; d: Donnees; onMo
           </Text>
         </Group>
       ))}
-      {partagees.length > 0 && (
-        <Text size="xs" c="dimmed" mt={6}>
-          À tour de rôle, pas son tour : {partagees.map((m) => m.titre).join(", ")}
-        </Text>
-      )}
     </Card>
   );
 }
@@ -351,7 +350,7 @@ export function Famille() {
           </SimpleGrid>
           <Alert color="brique" variant="light" p="xs">
             <Text size="sm">
-              Pour confier une mission : dans une chose à faire (page « À faire » ou fiche d'un élément), « Confier aux enfants ». Plusieurs enfants : à tour de rôle.
+              Pour confier une mission : dans une chose à faire (page « À faire » ou fiche d'un élément), « Confier aux enfants ». Plusieurs enfants : partagée, le premier qui la fait gagne les points.
               Les enfants se connectent sur <b>{location.origin}/enfant</b>.
             </Text>
           </Alert>
