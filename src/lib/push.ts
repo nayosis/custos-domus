@@ -44,8 +44,11 @@ export async function abonnementCourant() {
   return reg ? reg.pushManager.getSubscription() : null;
 }
 
-/** Demande l'autorisation, abonne cet appareil et l'enregistre sur le serveur. */
-export async function activerPush(clePublique: string) {
+/**
+ * Demande l'autorisation, abonne cet appareil et l'enregistre sur le serveur
+ * (`chemin` : celui des parents, ou celui de l'espace des enfants).
+ */
+export async function activerPush<T = unknown>(clePublique: string, chemin = "/api/notifications/abonnements"): Promise<T> {
   const reg = await enregistrement;
   if (!reg) throw new Error("Ce navigateur n'a pas permis à l'application de recevoir des notifications (navigation privée ?). Rechargez la page ou essayez un autre navigateur.");
   const permission = await Notification.requestPermission();
@@ -59,7 +62,7 @@ export async function activerPush(clePublique: string) {
   }
   abonnement ??= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: versOctets(clePublique) });
   const json = abonnement.toJSON();
-  return appelApi("/api/notifications/abonnements", { corps: { endpoint: json.endpoint, p256dh: json.keys?.p256dh, auth: json.keys?.auth, appareil: nomAppareil() } });
+  return appelApi<T>(chemin, { corps: { endpoint: json.endpoint, p256dh: json.keys?.p256dh, auth: json.keys?.auth, appareil: nomAppareil() } });
 }
 
 /** Désabonne cet appareil (ici et sur le serveur). */

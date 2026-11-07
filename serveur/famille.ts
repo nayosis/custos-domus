@@ -12,7 +12,7 @@ import { realiserEntretien } from "../src/data/entretiens";
 import { envoyerPush } from "./envoi";
 import { ErreurMetier } from "./erreurs";
 import { compteDe, missionDe, validerAutomatiquement } from "./missions";
-import { abonnementsDe, destinataires } from "./reglages";
+import { abonnementsDe, abonnementsEnfant, destinataires } from "./reglages";
 
 export const hacherPin = (pin: unknown) => {
   if (!pinValide(pin)) throw new ErreurMetier("Le code doit faire de 4 à 8 chiffres.");
@@ -162,6 +162,54 @@ export async function faireMission(enfantId: string, entretienId: string) {
   await db.update(realisation).set({ enfantId, points: m.points, validation: "a_valider", avant }).where(eq(realisation.id, id));
   prevenirParents("Mission faite", `${e.prenom} : ${m.titre} (${m.points} pts), à valider`);
   return id;
+}
+
+/** Prévient un enfant sur ses téléphones abonnés (sans bloquer ni faire échouer l'action du parent). */
+export function prevenirEnfant(enfantId: string, n: { titre: string; corps: string; tag?: string }) {
+  for (const a of abonnementsEnfant(enfantId)) envoyerPush(a, { ...n, url: "/enfant" }).catch((err: unknown) => console.error("Notification :", err));
+}
+
+/**
+ * Tournée de 8 h : à chaque enfant abonné, ses missions du jour (et celles en retard).
+ * Renvoie le nombre de notifications envoyées et les erreurs.
+ */
+export async function rappelerMissions(jour: string) {
+  const bilan = { notifications: 0, erreurs: [] as string[] };
+  const enfants = await db.select({ id: enfant.id, prenom: enfant.prenom }).from(enfant).where(eq(enfant.actif, true));
+  for (const e of enfants) {
+    const appareils = abonnementsEnfant(e.id);
+    if (!appareils.length) continue;
+    const missions = await db
+      .select({ titre: entretien.titre, echeance: entretien.echeance, points: entretien.points })
+      .from(entretien)
+      .innerJoin(missionTour, eq(missionTour.entretienId, entretien.id))
+      .leftJoin(element, eq(element.id, entretien.elementId))
+      .leftJoin(maison, sql`${maison.id} = coalesce(${entretien.maisonId}, ${element.maisonId})`)
+      .where(
+        and(
+          eq(missionTour.enfantId, e.id),
+          eq(entretien.actif, true),
+          isNotNull(entretien.points),
+          lte(entretien.echeance, jour),
+          or(sql`${maison.id} is null`, eq(maison.archivee, false)),
+        ),
+      )
+      .orderBy(asc(entretien.echeance), asc(entretien.titre));
+    if (!missions.length) continue;
+    const enRetard = missions.filter((m) => m.echeance < jour).length;
+    const n = {
+      titre: missions.length === 1 ? (enRetard ? "Mission en retard" : "Mission du jour") : `${missions.length} missions aujourd'hui`,
+      corps: missions.length === 1 ? `${missions[0].titre} (${missions[0].points} pts)` : missions.map((m) => m.titre).join(" · "),
+      url: "/enfant",
+      tag: "custos-missions",
+    };
+    for (const a of appareils) {
+      const r = await envoyerPush(a, n);
+      if (r === "ok") bilan.notifications++;
+      else if (r !== "expire") bilan.erreurs.push(`Notification à ${e.prenom} : ${r}`);
+    }
+  }
+  return bilan;
 }
 
 /** L'enfant demande une récompense : ses points sont réservés jusqu'à la réponse d'un parent. */

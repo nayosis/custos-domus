@@ -80,6 +80,15 @@ export function ouvrirComptes(chemin: string) {
       appareil TEXT,
       cree_le TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     );
+    -- Téléphones des enfants abonnés aux notifications (l'enfant est dans la base des données, pas ici).
+    CREATE TABLE IF NOT EXISTS abonnement_push_enfant (
+      endpoint TEXT PRIMARY KEY,
+      enfant_id TEXT NOT NULL,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      appareil TEXT,
+      cree_le TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    );
   `);
   return base;
 }

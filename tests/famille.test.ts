@@ -1,10 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import { baseCourante } from "../serveur/base";
+import { remplacerEnvois, type Notification } from "../serveur/envoi";
+import { rappelerMissions } from "../serveur/famille";
 import { reinitialiserLimitationEnfants } from "../serveur/routesEnfants";
 import { aujourdhui } from "../src/lib/dates";
 import { ajouter } from "../src/lib/entretiens";
 import { debutSemaine, faisable, finSemaine, pinValide } from "../src/lib/famille";
 import { SUPER, serveurDeTest } from "./outils-serveur";
+
+// Notifications : capturées au lieu d'être envoyées.
+const pushs: { endpoint: string; n: Notification }[] = [];
+remplacerEnvois({
+  push: async (a, n) => {
+    pushs.push({ endpoint: a.endpoint, n });
+    return "ok";
+  },
+});
+const recus = (endpoint: string) => pushs.filter((p) => p.endpoint === endpoint).map((p) => p.n);
 
 const s = await serveurDeTest();
 const { cookie } = await s.connexion(SUPER.email, SUPER.motDePasse);
@@ -222,5 +234,77 @@ describe("récompenses", () => {
     // Désactivée : plus proposée.
     await ok("majRecompense", ecran, { actif: false });
     expect((await espace(ca)).recompenses.map((r: { titre: string }) => r.titre)).toEqual(["Une séance de cinéma"]);
+  });
+});
+
+describe("notifications des enfants", () => {
+  const abonner = (c: string, endpoint: string) =>
+    s.requete("/api/enfant/notifications/abonnements", { corps: { endpoint, p256dh: "cle", auth: "auth", appareil: "Chrome sur Android" }, cookie: c });
+
+  test("son téléphone : réponses des parents, missions du jour à 8 h ; rien pour les autres", async () => {
+    const a = await ok("creerEnfant", { prenom: "Kenza", pin: "1111" });
+    const b = await ok("creerEnfant", { prenom: "Louis", pin: "2222" });
+    const { cookie: ca } = await connexionEnfant("Kenza", "1111");
+    const tel = "https://push.exemple/kenza";
+    expect((await (await s.requete("/api/enfant/notifications", { cookie: ca })).json()).appareils).toEqual([]);
+    expect((await abonner(ca, "http://pas-https")).status).toBe(400);
+    const etat = await (await abonner(ca, tel)).json();
+    expect(etat.appareils).toEqual([tel]);
+    expect(etat.clePublique).toBeTruthy();
+
+    // Missions du jour : la sienne, une en retard ; pas celle de Louis, pas celle de la semaine prochaine.
+    await mission([a], { titre: "Ranger sa chambre", points: 10 });
+    await mission([a, b], { titre: "Sortir le chien", echeance: ajouter(jour, -2, "jour") });
+    await mission([b], { titre: "Arroser" });
+    await mission([a], { titre: "Plus tard", echeance: ajouter(jour, 3, "jour") });
+    pushs.length = 0;
+    const bilan = await rappelerMissions(jour);
+    expect(bilan.erreurs).toEqual([]);
+    expect(recus(tel)).toEqual([{ titre: "2 missions aujourd'hui", corps: "Sortir le chien · Ranger sa chambre", url: "/enfant", tag: "custos-missions" }]);
+
+    // Réponses des parents.
+    pushs.length = 0;
+    const m = await mission([a], { points: 15, titre: "Vider les poubelles" });
+    await fait(ca, m);
+    const r = (await ok("famille")).aValider.find((x: { enfantId: string }) => x.enfantId === a);
+    await ok("validerMission", r.id);
+    expect(recus(tel).map((n) => [n.titre, n.corps])).toEqual([["Mission validée", "Vider les poubelles : +15 pts"]]);
+    const m2 = await mission([a], { points: 5, titre: "Mettre la table" });
+    await fait(ca, m2);
+    const r2 = (await ok("famille")).aValider.find((x: { enfantId: string }) => x.enfantId === a);
+    await ok("refuserMission", r2.id, { motif: "Pas fini" });
+    expect(recus(tel).at(-1)).toMatchObject({ titre: "Mission refusée", corps: "Mettre la table : Pas fini" });
+    const cadeau = await ok("creerRecompense", { titre: "Un dessert", points: 10 });
+    await s.requete(`/api/enfant/recompenses/${cadeau}/demander`, { corps: {}, cookie: ca });
+    await ok("accorderEchange", (await espace(ca)).demandes[0].id);
+    expect(recus(tel).at(-1)).toMatchObject({ titre: "Récompense accordée", corps: "Un dessert", url: "/enfant" });
+    // Louis n'est pas abonné : rien n'est parti ailleurs.
+    expect(pushs.every((p) => p.endpoint === tel)).toBe(true);
+  });
+
+  test("quitter, désactiver ou supprimer le profil : plus de notifications sur cet appareil", async () => {
+    const a = await ok("creerEnfant", { prenom: "Maël", pin: "1111" });
+    const tel = "https://push.exemple/mael";
+    let { cookie: c } = await connexionEnfant("Maël", "1111");
+    await abonner(c, tel);
+    await s.requete("/api/enfant/deconnexion", { corps: { endpoint: tel }, cookie: c });
+    ({ cookie: c } = await connexionEnfant("Maël", "1111"));
+    expect((await (await s.requete("/api/enfant/notifications", { cookie: c })).json()).appareils).toEqual([]);
+
+    await abonner(c, tel);
+    // Retiré par l'enfant lui-même.
+    expect((await (await s.requete("/api/enfant/notifications/abonnements/retirer", { corps: { endpoint: tel }, cookie: c })).json()).appareils).toEqual([]);
+    await abonner(c, tel);
+    await ok("majEnfant", a, { actif: false });
+    await ok("majEnfant", a, { actif: true });
+    ({ cookie: c } = await connexionEnfant("Maël", "1111"));
+    expect((await (await s.requete("/api/enfant/notifications", { cookie: c })).json()).appareils).toEqual([]);
+
+    await abonner(c, tel);
+    await mission([a], { titre: "Promener le chien" });
+    await ok("supprimerEnfant", a);
+    pushs.length = 0;
+    await rappelerMissions(jour);
+    expect(recus(tel)).toEqual([]);
   });
 });

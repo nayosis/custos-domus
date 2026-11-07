@@ -97,4 +97,6 @@ les voitures, et les enfants à qui confier des choses. Décisions prises (novem
    comme avant si rien n'a été fait depuis. Un parent qui coche « Fait » ne donne de points à personne. Objectif de
    points par semaine (du lundi au dimanche) ; **récompenses** définies par les parents, demandées par l'enfant (points
    réservés), accordées ou refusées (les points reviennent). Page **Famille** (`/famille`, dans « Plus », pastille quand
-   quelque chose attend). Codes PIN masqués dans le journal. Ton sobre, pas enfantin.
+   quelque chose attend). Codes PIN masqués dans le journal. **Notifications** sur le téléphone de l'enfant (table `abonnement_push_enfant`
+   dans comptes.db) : ses missions du jour et en retard à la tournée de 8 h, mission validée ou refusée, récompense
+   accordée ou refusée ; retirées quand il quitte l'appareil (« Quitter »), quand le profil est désactivé ou supprimé. Ton sobre, pas enfantin.

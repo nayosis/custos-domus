@@ -9,6 +9,7 @@ import { diffuser } from "./evenements";
 import { ErreurMetier } from "./erreurs";
 import { demanderRecompense, enfantActif, espaceEnfant, faireMission, verifierPin } from "./famille";
 import { journaliser } from "./journal";
+import { abonnementsEnfant, abonnerEnfant, clesVapid, desabonnerEnfant } from "./reglages";
 import { contexteRequete } from "./tracabilite";
 
 export const COOKIE_ENFANT = "custos_enfant";
@@ -74,14 +75,45 @@ export const routesEnfants = new Elysia()
     },
     { body: t.Object({ prenom: t.String({ maxLength: 40 }), pin: t.String({ maxLength: 20 }), souvenir: t.Boolean() }) },
   )
-  .post("/api/enfant/deconnexion", ({ cookie }) => {
-    const jeton = cookie[COOKIE_ENFANT]?.value;
-    if (typeof jeton === "string") supprimerSessionEnfant(jeton);
-    cookie[COOKIE_ENFANT].remove();
-    return { ok: true };
-  })
+  .post(
+    "/api/enfant/deconnexion",
+    ({ cookie, body }) => {
+      const jeton = cookie[COOKIE_ENFANT]?.value;
+      // Cet appareil ne reçoit plus les notifications de l'enfant qui s'en va (tablette partagée).
+      const id = typeof jeton === "string" ? lireSessionEnfant(jeton) : null;
+      if (id && body?.endpoint) desabonnerEnfant(id, body.endpoint);
+      if (typeof jeton === "string") supprimerSessionEnfant(jeton);
+      cookie[COOKIE_ENFANT].remove();
+      return { ok: true };
+    },
+    { body: t.Optional(t.Object({ endpoint: t.Optional(t.String({ maxLength: 2000 })) })) },
+  )
   .get("/api/enfant/moi", async ({ cookie }) => ({ prenom: (await exigerEnfant(cookie[COOKIE_ENFANT]?.value)).prenom }))
   .get("/api/enfant/espace", async ({ cookie }) => espaceEnfant((await exigerEnfant(cookie[COOKIE_ENFANT]?.value)).id))
+  // Notifications sur son téléphone : la clé publique, et ses appareils abonnés.
+  .get("/api/enfant/notifications", async ({ cookie }) => {
+    const e = await exigerEnfant(cookie[COOKIE_ENFANT]?.value);
+    return { clePublique: clesVapid().publicKey, appareils: abonnementsEnfant(e.id).map((a) => a.endpoint) };
+  })
+  .post(
+    "/api/enfant/notifications/abonnements",
+    async ({ cookie, body }) => {
+      const e = await exigerEnfant(cookie[COOKIE_ENFANT]?.value);
+      if (!/^https:\/\//.test(body.endpoint)) throw new ErreurMetier("Abonnement invalide.");
+      abonnerEnfant(e.id, { endpoint: body.endpoint, p256dh: body.p256dh, auth: body.auth, appareil: body.appareil?.slice(0, 100) ?? null });
+      return { clePublique: clesVapid().publicKey, appareils: abonnementsEnfant(e.id).map((a) => a.endpoint) };
+    },
+    { body: t.Object({ endpoint: t.String({ maxLength: 2000 }), p256dh: t.String({ maxLength: 200 }), auth: t.String({ maxLength: 100 }), appareil: t.Optional(t.String()) }) },
+  )
+  .post(
+    "/api/enfant/notifications/abonnements/retirer",
+    async ({ cookie, body }) => {
+      const e = await exigerEnfant(cookie[COOKIE_ENFANT]?.value);
+      desabonnerEnfant(e.id, body.endpoint);
+      return { clePublique: clesVapid().publicKey, appareils: abonnementsEnfant(e.id).map((a) => a.endpoint) };
+    },
+    { body: t.Object({ endpoint: t.String({ maxLength: 2000 }) }) },
+  )
   .post("/api/enfant/missions/:id/fait", async ({ cookie, params }) => {
     const e = await exigerEnfant(cookie[COOKIE_ENFANT]?.value);
     await ecrire(e.prenom, "faireMission", [params.id], () => faireMission(e.id, params.id));

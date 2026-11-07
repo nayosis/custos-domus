@@ -10,6 +10,7 @@ import { dateLisible, maintenantLocal } from "../src/lib/dates";
 import { ajouter, joursEntre, libelleHeure, lieu, situation } from "../src/lib/entretiens";
 import { JOUR_RELANCE, JOUR_RELEVE } from "../src/lib/vehicules";
 import { envoyerEmail, envoyerPush, type Message } from "./envoi";
+import { rappelerMissions } from "./famille";
 import { abonnementsDe, configEnvoi, derniereTournee, destinataires, envoiEmailPossible, noterTournee } from "./reglages";
 
 /** Heure de la tournée quotidienne (fuseau de l'installation). */
@@ -229,6 +230,10 @@ export async function envoyerRappels(maintenant = new Date()): Promise<BilanTour
           else if (res !== "expire") bilan.erreurs.push(`Notification à ${d.adresse} : ${res}`);
         }
     }
+  // Les enfants : leurs missions du jour.
+  const enfants = await rappelerMissions(jour);
+  bilan.notifications += enfants.notifications;
+  bilan.erreurs.push(...enfants.erreurs);
   noterTournee(jour);
   if (bilan.erreurs.length) console.error(`Rappels du ${jour} :`, bilan.erreurs.join(" ; "));
   return bilan;
@@ -243,7 +248,7 @@ export function planifierRappels() {
     enCours = true;
     try {
       const b = await envoyerRappels();
-      if (b.alertes || b.recap) console.log(`Rappels du ${b.jour} : ${b.emails} e-mail(s), ${b.notifications} notification(s)`);
+      if (b.alertes || b.recap || b.notifications) console.log(`Rappels du ${b.jour} : ${b.emails} e-mail(s), ${b.notifications} notification(s)`);
     } catch (e) {
       console.error("Tournée des rappels :", e);
     } finally {

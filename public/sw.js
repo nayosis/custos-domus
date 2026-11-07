@@ -18,7 +18,7 @@ self.addEventListener("push", (e) => {
       icon: "/icone-192.png",
       badge: "/badge-96.png",
       lang: "fr",
-      tag: "custos-rappels",
+      tag: d.tag || "custos-rappels",
       renotify: true,
       data: { url: d.url || "/" },
     }),

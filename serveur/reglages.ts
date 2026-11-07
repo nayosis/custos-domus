@@ -148,10 +148,34 @@ export function abonner(utilisateurId: string, a: AbonnementPush) {
     .run(a.endpoint, utilisateurId, a.p256dh, a.auth, a.appareil);
 }
 
-export const desabonner = (endpoint: string) => baseComptes().query("DELETE FROM abonnement_push WHERE endpoint = ?").run(endpoint);
+/** Appareil désabonné (ou plus joignable) : oublié, pour les parents comme pour les enfants. */
+export function desabonner(endpoint: string) {
+  baseComptes().query("DELETE FROM abonnement_push WHERE endpoint = ?").run(endpoint);
+  baseComptes().query("DELETE FROM abonnement_push_enfant WHERE endpoint = ?").run(endpoint);
+}
 
 export const abonnementsDe = (utilisateurId: string) =>
   baseComptes().query<AbonnementPush, [string]>("SELECT endpoint, p256dh, auth, appareil FROM abonnement_push WHERE utilisateur_id = ? ORDER BY cree_le").all(utilisateurId);
+
+/** Téléphone d'un enfant : un appareil ne sert qu'à un enfant à la fois (le dernier qui l'a activé). */
+export function abonnerEnfant(enfantId: string, a: AbonnementPush) {
+  baseComptes()
+    .query(
+      `INSERT INTO abonnement_push_enfant (endpoint, enfant_id, p256dh, auth, appareil) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (endpoint) DO UPDATE SET enfant_id = excluded.enfant_id, p256dh = excluded.p256dh, auth = excluded.auth, appareil = excluded.appareil`,
+    )
+    .run(a.endpoint, enfantId, a.p256dh, a.auth, a.appareil);
+}
+
+/** Retire cet appareil des notifications de cet enfant (sans toucher à celles d'un parent sur le même appareil). */
+export const desabonnerEnfant = (enfantId: string, endpoint: string) =>
+  baseComptes().query("DELETE FROM abonnement_push_enfant WHERE enfant_id = ? AND endpoint = ?").run(enfantId, endpoint);
+
+export const abonnementsEnfant = (enfantId: string) =>
+  baseComptes().query<AbonnementPush, [string]>("SELECT endpoint, p256dh, auth, appareil FROM abonnement_push_enfant WHERE enfant_id = ? ORDER BY cree_le").all(enfantId);
+
+/** Profil supprimé ou désactivé : plus aucune notification. */
+export const supprimerAbonnementsEnfant = (enfantId: string) => baseComptes().query("DELETE FROM abonnement_push_enfant WHERE enfant_id = ?").run(enfantId);
 
 /** Comptes actifs, avec leurs préférences : les destinataires de la tournée des rappels. */
 export function destinataires() {

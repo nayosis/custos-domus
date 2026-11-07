@@ -7,7 +7,8 @@ import webpush from "web-push";
 import { clesVapid, configEnvoi, desabonner, type AbonnementPush, type ConfigEnvoi } from "./reglages";
 
 export type Message = { sujet: string; texte: string; html: string };
-export type Notification = { titre: string; corps: string; url: string };
+/** `tag` : les notifications du même tag se remplacent (par défaut, celles des rappels). */
+export type Notification = { titre: string; corps: string; url: string; tag?: string };
 type ResultatPush = "ok" | "expire" | string;
 
 type Envois = {

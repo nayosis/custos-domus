@@ -8,9 +8,10 @@ import { echange, element, enfant, entretien, maison, missionTour, realisation, 
 import { aujourdhui } from "../lib/dates";
 import { ECHECS_PIN_MAX, OBJECTIF_DEFAUT } from "../lib/famille";
 import { ErreurMetier } from "../../serveur/erreurs";
-import { hacherPin } from "../../serveur/famille";
+import { hacherPin, prevenirEnfant } from "../../serveur/famille";
 import { compteDe, reparerMissions, enfantsMission as enfantsDeMission, validerAutomatiquement } from "../../serveur/missions";
 import { supprimerSessionsEnfant } from "../../serveur/comptes";
+import { supprimerAbonnementsEnfant } from "../../serveur/reglages";
 import { utilisateurCourant } from "../../serveur/tracabilite";
 
 const prenomValide = (p: unknown) => {
@@ -117,7 +118,10 @@ export async function majEnfant(id: string, v: { prenom?: string; objectifSemain
   if (v.objectifSemaine !== undefined) patch.objectifSemaine = objectifValide(v.objectifSemaine);
   if (v.actif !== undefined) patch.actif = !!v.actif;
   if (Object.keys(patch).length) await db.update(enfant).set(patch).where(eq(enfant.id, id));
-  if (v.actif === false) supprimerSessionsEnfant(id);
+  if (v.actif === false) {
+    supprimerSessionsEnfant(id);
+    supprimerAbonnementsEnfant(id);
+  }
   return id;
 }
 
@@ -133,6 +137,7 @@ export async function supprimerEnfant(id: string) {
   await db.update(realisation).set({ enfantId: null, points: null, validation: null, avant: null }).where(eq(realisation.enfantId, id));
   await db.delete(enfant).where(eq(enfant.id, id));
   supprimerSessionsEnfant(id);
+  supprimerAbonnementsEnfant(id);
   await reparerMissions();
 }
 
@@ -146,8 +151,9 @@ async function aValider(realisationId: string) {
 }
 
 export async function validerMission(realisationId: string) {
-  await aValider(realisationId);
+  const r = await aValider(realisationId);
   await db.update(realisation).set({ validation: "validee", validePar: utilisateurCourant(), valideLe: new Date().toISOString() }).where(eq(realisation.id, realisationId));
+  if (r.enfantId) prevenirEnfant(r.enfantId, { titre: "Mission validée", corps: `${r.titre} : +${r.points ?? 0} pts`, tag: `custos-mission-${r.id}` });
 }
 
 /**
@@ -160,6 +166,7 @@ export async function refuserMission(realisationId: string, v: { motif?: string 
     .update(realisation)
     .set({ validation: "refusee", validePar: utilisateurCourant(), valideLe: new Date().toISOString(), ...(v.motif?.trim() ? { note: v.motif.trim() } : {}) })
     .where(eq(realisation.id, realisationId));
+  if (r.enfantId) prevenirEnfant(r.enfantId, { titre: "Mission refusée", corps: v.motif?.trim() ? `${r.titre} : ${v.motif.trim()}` : r.titre, tag: `custos-mission-${r.id}` });
   if (!r.entretienId || !r.avant) return;
   const [derniere] = await db
     .select({ id: realisation.id })
@@ -214,6 +221,11 @@ async function repondre(id: string, statut: "accordee" | "refusee") {
   if (!d) throw new ErreurMetier("Demande introuvable", 404);
   if (d.statut !== "demandee") throw new ErreurMetier("Déjà traitée.");
   await db.update(echange).set({ statut, reponduPar: utilisateurCourant(), reponduLe: new Date().toISOString() }).where(eq(echange.id, id));
+  prevenirEnfant(d.enfantId, {
+    titre: statut === "accordee" ? "Récompense accordée" : "Récompense refusée",
+    corps: statut === "accordee" ? d.titre : `${d.titre} : tes ${d.points} pts te sont rendus`,
+    tag: `custos-echange-${d.id}`,
+  });
 }
 /** Accordée : les points sont dépensés. */
 export const accorderEchange = (id: string) => repondre(id, "accordee");

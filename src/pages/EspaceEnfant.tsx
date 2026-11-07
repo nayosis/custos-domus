@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Anchor, Badge, Button, Card, Center, Checkbox, Chip, Group, Loader, Paper, PasswordInput, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconCheck, IconGift, IconLogout } from "@tabler/icons-react";
+import { IconBell, IconCheck, IconGift, IconLogout } from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Logo } from "../components/Logo";
 import { Semaine } from "./Famille";
 import { appelApi, ErreurServeur } from "../lib/rpc";
 import { aujourdhui, dateLisible } from "../lib/dates";
 import { ajouter } from "../lib/entretiens";
+import { abonnementCourant, activerPush, iosHorsApplication, pushBloque, pushDisponible, serviceWorker } from "../lib/push";
 import { LIBELLES_ECHANGE, LIBELLES_VALIDATION, points, type StatutEchange, type Validation } from "../lib/famille";
 import type { EspaceEnfant as Espace } from "../../serveur/famille";
 
@@ -170,6 +171,84 @@ function Missions({ e, agir }: { e: Espace; agir: (chemin: string, message: stri
   );
 }
 
+type EtatNotifications = { clePublique: string; appareils: string[] };
+
+/**
+ * Notifications sur son téléphone : missions du jour (à 8 h) et réponses des parents.
+ * Désactiver ne retire que l'enfant : un parent abonné sur le même appareil garde les siennes.
+ */
+function Notifications() {
+  const [etat, setEtat] = useState<EtatNotifications | null>(null);
+  const [ici, setIci] = useState<string | null | undefined>(undefined);
+  const [sansServiceWorker, setSansServiceWorker] = useState(false);
+  const [occupe, setOccupe] = useState(false);
+  useEffect(() => {
+    appelApi<EtatNotifications>("/api/enfant/notifications", { silencieux: true }).then(setEtat, () => setEtat(null));
+    serviceWorker().then((r) => setSansServiceWorker(!r));
+    abonnementCourant()
+      .then((a) => setIci(a?.endpoint ?? null))
+      .catch(() => setIci(null));
+  }, []);
+  if (!etat || ici === undefined) return null;
+  const abonne = !!ici && etat.appareils.includes(ici);
+  const basculer = async () => {
+    setOccupe(true);
+    try {
+      if (abonne) setEtat(await appelApi<EtatNotifications>("/api/enfant/notifications/abonnements/retirer", { corps: { endpoint: ici }, silencieux: true }));
+      else {
+        setEtat(await activerPush<EtatNotifications>(etat.clePublique, "/api/enfant/notifications/abonnements"));
+        setIci((await abonnementCourant().catch(() => null))?.endpoint ?? null);
+        notifications.show({ color: "green", message: "Notifications activées sur ce téléphone." });
+      }
+    } catch (err) {
+      notifications.show({ color: "red", message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setOccupe(false);
+    }
+  };
+  if (abonne)
+    return (
+      <Group gap={6} justify="center">
+        <IconBell size={14} color="var(--mantine-color-dimmed)" />
+        <Text size="xs" c="dimmed">
+          Notifications activées sur ce téléphone ·{" "}
+          <Anchor component="button" type="button" size="xs" onClick={basculer} disabled={occupe}>
+            désactiver
+          </Anchor>
+        </Text>
+      </Group>
+    );
+  return (
+    <Card withBorder>
+      <Group gap="sm" wrap="nowrap" align="flex-start">
+        <IconBell size={20} color="var(--mantine-color-brique-6)" style={{ flexShrink: 0, marginTop: 2 }} />
+        <Stack gap={6} style={{ flex: 1 }}>
+          <Text size="sm">Être prévenu sur ce téléphone : tes missions du jour, et quand un parent valide ou répond.</Text>
+          {iosHorsApplication() ? (
+            <Text size="xs" c="dimmed">
+              Sur iPhone : ajoute d'abord Custos Domus à l'écran d'accueil (Partager, puis « Sur l'écran d'accueil »), ouvre-la depuis son icône et reviens ici.
+            </Text>
+          ) : !pushDisponible() || sansServiceWorker ? (
+            <Text size="xs" c="dimmed">
+              Ce navigateur ne permet pas les notifications.
+            </Text>
+          ) : pushBloque() ? (
+            <Text size="xs" c="dimmed">
+              Les notifications sont bloquées pour ce site : autorise-les dans les réglages du navigateur, puis recharge la page.
+            </Text>
+          ) : (
+            <Group>
+              <Button size="xs" leftSection={<IconBell size={14} />} loading={occupe} onClick={basculer}>
+                Activer
+              </Button>
+            </Group>
+          )}
+        </Stack>
+      </Group>
+    </Card>
+  );
+}
+
 /** L'espace d'un enfant : ses missions, sa semaine, ses points et ses récompenses. Rien d'autre. */
 export function EspaceEnfant() {
   const client = useQueryClient();
@@ -202,7 +281,9 @@ export function EspaceEnfant() {
     }
   };
   const deconnexion = async () => {
-    await appelApi("/api/enfant/deconnexion", { corps: {} }).catch(() => undefined);
+    // Cet appareil ne reçoit plus ses notifications (tablette partagée : le suivant ne reçoit pas les siennes).
+    const endpoint = (await abonnementCourant().catch(() => null))?.endpoint;
+    await appelApi("/api/enfant/deconnexion", { corps: endpoint ? { endpoint } : {} }).catch(() => undefined);
     client.removeQueries({ queryKey: CLE });
     void refetch();
   };
@@ -230,6 +311,8 @@ export function EspaceEnfant() {
       </Card>
 
       <Missions e={e} agir={agir} />
+
+      <Notifications />
 
       {e.recompenses.length > 0 && (
         <Card withBorder>
