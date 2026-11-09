@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Anchor, Badge, Button, Card, Center, Checkbox, Chip, Group, Loader, Paper, PasswordInput, Stack, Text, TextInput, Title } from "@mantine/core";
+import { Alert, Anchor, Badge, Button, Card, Center, Checkbox, Chip, Group, Loader, Modal, NumberInput, Paper, PasswordInput, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconBell, IconCheck, IconGift, IconLogout } from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,7 +9,7 @@ import { appelApi, ErreurServeur } from "../lib/rpc";
 import { aujourdhui, dateLisible } from "../lib/dates";
 import { ajouter } from "../lib/entretiens";
 import { abonnementCourant, activerPush, iosHorsApplication, pushBloque, pushDisponible, serviceWorker } from "../lib/push";
-import { LIBELLES_ECHANGE, LIBELLES_VALIDATION, points, type StatutEchange, type Validation } from "../lib/famille";
+import { LIBELLES_ECHANGE, LIBELLES_VALIDATION, partager, points, type StatutEchange, type Validation } from "../lib/famille";
 import type { EspaceEnfant as Espace } from "../../serveur/famille";
 
 const CLE = ["espace-enfant"];
@@ -117,7 +117,83 @@ function Connexion({ onConnecte }: { onConnecte: () => void }) {
   );
 }
 
-function Missions({ e, agir }: { e: Espace; agir: (chemin: string, message: string) => Promise<void> }) {
+type Agir = (chemin: string, message: string, corps?: unknown) => Promise<boolean>;
+type Mission = Espace["missions"][number];
+
+/**
+ * « C'est fait » : seul, ou avec d'autres. Avec d'autres, les points sont partagés à parts égales,
+ * et chacun peut être ressaisi (le total doit rester celui de la mission).
+ */
+function ModalFait({ mission, e, agir, onClose }: { mission: Mission | null; e: Espace; agir: Agir; onClose: () => void }) {
+  const [avec, setAvec] = useState<string[]>([]);
+  const [parts, setParts] = useState<Record<string, number | string>>({});
+  const [cle, setCle] = useState<string | null>(null);
+  if ((mission?.id ?? null) !== cle) {
+    setCle(mission?.id ?? null);
+    setAvec([]);
+    setParts({});
+  }
+  if (!mission) return null;
+  const total = mission.points;
+  const qui = ["moi", ...avec];
+  const choisir = (ids: string[]) => {
+    setAvec(ids);
+    const egales = partager(total, ids.length + 1);
+    setParts(Object.fromEntries(["moi", ...ids].map((id, i) => [id, egales[i]])));
+  };
+  const valeur = (id: string) => (typeof parts[id] === "number" ? (parts[id] as number) : 0);
+  const somme = qui.reduce((t, id) => t + valeur(id), 0);
+  const juste = !avec.length || somme === total;
+  const prenom = (id: string) => (id === "moi" ? "Toi" : (e.autres.find((x) => x.id === id)?.prenom ?? "?"));
+  const valider = async () => {
+    const corps = avec.length ? { parts: qui.map((id) => ({ enfantId: id === "moi" ? e.id : id, points: valeur(id) })) } : {};
+    if (await agir(`/api/enfant/missions/${mission.id}/fait`, avec.length ? "Noté, points partagés : un parent va valider." : "Noté : un parent va valider.", corps)) onClose();
+  };
+  return (
+    <Modal opened onClose={onClose} title={`C'est fait : ${mission.titre}`} centered>
+      <Stack>
+        <div>
+          <Text size="sm" mb={6}>
+            Tu l'as faite avec quelqu'un ?
+          </Text>
+          <Chip.Group multiple value={avec} onChange={choisir}>
+            <Group gap="xs">
+              {e.autres.map((x) => (
+                <Chip key={x.id} value={x.id}>
+                  {x.prenom}
+                </Chip>
+              ))}
+            </Group>
+          </Chip.Group>
+        </div>
+        {avec.length > 0 && (
+          <Stack gap="xs">
+            <Text size="sm" c="dimmed">
+              Les {total} points, à parts égales. Vous avez convenu autre chose ? Change les nombres.
+            </Text>
+            {qui.map((id) => (
+              <Group key={id} gap="sm" wrap="nowrap">
+                <Text size="sm" style={{ flex: 1 }}>
+                  {prenom(id)}
+                </Text>
+                <NumberInput w={110} min={0} max={total} allowDecimal={false} suffix=" pts" value={parts[id] ?? 0} onChange={(v) => setParts({ ...parts, [id]: v })} />
+              </Group>
+            ))}
+            <Text size="sm" c={juste ? "dimmed" : "red"}>
+              Total : {somme} / {total} pts
+            </Text>
+          </Stack>
+        )}
+        <Button leftSection={<IconCheck size={16} />} disabled={!juste} onClick={valider}>
+          {avec.length ? "Valider le partage" : "Valider"}
+        </Button>
+      </Stack>
+    </Modal>
+  );
+}
+
+function Missions({ e, agir }: { e: Espace; agir: Agir }) {
+  const [fait, setFait] = useState<Mission | null>(null);
   const maintenant = e.missions.filter((m) => m.faisable);
   const plusTard = e.missions.filter((m) => !m.faisable);
   return (
@@ -145,7 +221,10 @@ function Missions({ e, agir }: { e: Espace; agir: (chemin: string, message: stri
               </Text>
             )}
           </div>
-          <Button leftSection={<IconCheck size={16} />} onClick={() => agir(`/api/enfant/missions/${m.id}/fait`, "Noté : un parent va valider.")}>
+          <Button
+            leftSection={<IconCheck size={16} />}
+            onClick={() => (e.autres.length ? setFait(m) : agir(`/api/enfant/missions/${m.id}/fait`, "Noté : un parent va valider."))}
+          >
             C'est fait
           </Button>
         </Group>
@@ -167,6 +246,7 @@ function Missions({ e, agir }: { e: Espace; agir: (chemin: string, message: stri
           ))}
         </>
       )}
+      <ModalFait mission={fait} e={e} agir={agir} onClose={() => setFait(null)} />
     </Card>
   );
 }
@@ -268,14 +348,16 @@ export function EspaceEnfant() {
     );
   if (!e || (error instanceof ErreurServeur && error.statut === 401)) return <Connexion onConnecte={() => void refetch()} />;
 
-  const agir = async (chemin: string, message: string) => {
+  const agir: Agir = async (chemin, message, corps = {}) => {
     setOccupe(true);
     try {
-      client.setQueryData(CLE, await appelApi<Espace>(chemin, { corps: {}, silencieux: true }));
+      client.setQueryData(CLE, await appelApi<Espace>(chemin, { corps, silencieux: true }));
       notifications.show({ color: "green", message });
+      return true;
     } catch (err) {
       notifications.show({ color: "red", message: err instanceof Error ? err.message : String(err) });
       if (err instanceof ErreurServeur && err.statut === 401) void refetch();
+      return false;
     } finally {
       setOccupe(false);
     }
@@ -362,6 +444,12 @@ export function EspaceEnfant() {
             <Group key={h.id} gap="sm" wrap="nowrap" py={4}>
               <Text size="sm" style={{ flex: 1 }} truncate>
                 {h.titre}
+                {h.avec.length > 0 && (
+                  <Text span size="xs" c="dimmed">
+                    {" "}
+                    · avec {h.avec.join(", ")}
+                  </Text>
+                )}
               </Text>
               <Text size="xs" c="dimmed">
                 {dateLisible(h.date, { day: "numeric", month: "short" })}

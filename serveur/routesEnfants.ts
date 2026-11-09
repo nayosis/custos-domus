@@ -114,11 +114,16 @@ export const routesEnfants = new Elysia()
     },
     { body: t.Object({ endpoint: t.String({ maxLength: 2000 }) }) },
   )
-  .post("/api/enfant/missions/:id/fait", async ({ cookie, params }) => {
-    const e = await exigerEnfant(cookie[COOKIE_ENFANT]?.value);
-    await ecrire(e.prenom, "faireMission", [params.id], () => faireMission(e.id, params.id));
-    return espaceEnfant(e.id);
-  })
+  .post(
+    "/api/enfant/missions/:id/fait",
+    async ({ cookie, params, body }) => {
+      const e = await exigerEnfant(cookie[COOKIE_ENFANT]?.value);
+      const parts = body?.parts;
+      await ecrire(e.prenom, "faireMission", parts?.length ? [params.id, { parts }] : [params.id], () => faireMission(e.id, params.id, parts));
+      return espaceEnfant(e.id);
+    },
+    { body: t.Optional(t.Object({ parts: t.Optional(t.Array(t.Object({ enfantId: t.String({ maxLength: 64 }), points: t.Integer({ minimum: 0, maximum: 1000 }) }), { maxItems: 20 })) })) },
+  )
   .post("/api/enfant/recompenses/:id/demander", async ({ cookie, params }) => {
     const e = await exigerEnfant(cookie[COOKIE_ENFANT]?.value);
     await ecrire(e.prenom, "demanderRecompense", [params.id], () => demanderRecompense(e.id, params.id));

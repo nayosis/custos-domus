@@ -3,7 +3,7 @@ import {
   Alert, AppShell, Badge, Box, Burger, Button, Divider, Drawer, Group, Menu, Modal, NavLink, PasswordInput, Stack, Text, UnstyledButton, SegmentedControl, useMantineColorScheme,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconBell, IconBrandGithub, IconChevronUp, IconDatabaseExport, IconDots, IconHistory, IconHome, IconKey, IconCar, IconLayoutDashboard, IconListCheck, IconLogout, IconPackage, IconTool, IconUserCog, IconUsers } from "@tabler/icons-react";
+import { IconBell, IconBrandGithub, IconChevronUp, IconDatabaseExport, IconDots, IconHelp, IconHistory, IconHome, IconKey, IconCar, IconLayoutDashboard, IconListCheck, IconLogout, IconPackage, IconTool, IconUserCog, IconUsers } from "@tabler/icons-react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { famille } from "../data/famille";
@@ -36,7 +36,10 @@ export function useAttenteFamille() {
 }
 
 /** Pour tous, dans le menu (pas dans la barre du bas du téléphone). */
-const ENTREES_COMPTE: Entree[] = [{ to: "/notifications", label: "Notifications", icone: IconBell, actif: (p) => p.startsWith("/notifications") }];
+const ENTREES_COMPTE: Entree[] = [
+  { to: "/notifications", label: "Notifications", icone: IconBell, actif: (p) => p.startsWith("/notifications") },
+  { to: "/aide", label: "Aide", icone: IconHelp, actif: (p) => p.startsWith("/aide") },
+];
 
 const ENTREES_ADMIN: Entree[] = [
   { to: "/comptes", label: "Comptes", icone: IconUserCog, actif: (p) => p.startsWith("/comptes") },

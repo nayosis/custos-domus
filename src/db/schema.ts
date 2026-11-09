@@ -156,7 +156,7 @@ export const realisation = sqliteTable(
     passee: integer("passee", { mode: "boolean" }).notNull().default(false),
     /** Véhicule : kilométrage au moment de l'intervention. */
     kilometrage: integer("kilometrage"),
-    /** Mission faite par un enfant : ses points, et leur validation (a_valider, validee, refusee). */
+    /** Mission faite par un enfant (celui qui l'a cochée) : ses points (total, partagé dans part_mission) et leur validation (a_valider, validee, refusee). */
     enfantId: text("enfant_id").references((): AnySQLiteColumn => enfant.id, { onDelete: "set null" }),
     points: integer("points"),
     validation: text("validation"),
@@ -251,6 +251,24 @@ export const missionTour = sqliteTable(
     ordre: integer("ordre").notNull(),
   },
   (t) => [primaryKey({ columns: [t.entretienId, t.enfantId] }), index("mission_tour_enfant_idx").on(t.enfantId)],
+);
+
+/**
+ * Les points d'une mission faite par un ou plusieurs enfants : la part de chacun (celui qui l'a cochée compris).
+ * Comptés une fois la réalisation validée ; la somme des parts fait les points de la mission.
+ */
+export const partMission = sqliteTable(
+  "part_mission",
+  {
+    realisationId: text("realisation_id")
+      .notNull()
+      .references(() => realisation.id, { onDelete: "cascade" }),
+    enfantId: text("enfant_id")
+      .notNull()
+      .references(() => enfant.id, { onDelete: "cascade" }),
+    points: integer("points").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.realisationId, t.enfantId] }), index("part_mission_enfant_idx").on(t.enfantId)],
 );
 
 /** Récompense définie par les parents, échangeable contre des points. */

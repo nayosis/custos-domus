@@ -8,6 +8,13 @@ export type Unite = "jour" | "semaine" | "mois" | "an";
 export type Ancrage = "realisation" | "fixe";
 
 export const NATURES: Record<Nature, string> = { tache: "Tâche", rdv: "Rendez-vous", routine: "Routine" };
+
+/** Ce qui distingue les trois natures, en une phrase (formulaire et page Aide). */
+export const EXPLICATIONS_NATURE: Record<Nature, string> = {
+  tache: "L'entretien qu'on fait soi-même.",
+  rdv: "Un entretien qu'il faut d'abord organiser : son étape en plus, « rendez-vous pris », sert à ne pas oublier d'appeler.",
+  routine: "La corvée répétitive : légère, sans historique de coûts, et calée sur un calendrier fixe.",
+};
 export const UNITES: Record<Unite, { un: string; plusieurs: string }> = {
   jour: { un: "jour", plusieurs: "jours" },
   semaine: { un: "semaine", plusieurs: "semaines" },

@@ -4,14 +4,14 @@
  */
 import { and, asc, desc, eq, inArray, isNotNull, lte, ne, or, sql } from "drizzle-orm";
 import { db, newId } from "../src/db/client";
-import { echange, element, enfant, entretien, maison, missionTour, realisation, recompense } from "../src/db/schema";
+import { echange, element, enfant, entretien, maison, missionTour, partMission, realisation, recompense } from "../src/db/schema";
 import { aujourdhui } from "../src/lib/dates";
 import { ajouter } from "../src/lib/entretiens";
 import { ECHECS_PIN_MAX, faisable, pinValide } from "../src/lib/famille";
 import { realiserEntretien } from "../src/data/entretiens";
 import { envoyerPush } from "./envoi";
 import { ErreurMetier } from "./erreurs";
-import { compteDe, missionDe, validerAutomatiquement } from "./missions";
+import { compteDe, missionDe, partsDe, validerAutomatiquement, type Part } from "./missions";
 import { abonnementsDe, abonnementsEnfant, destinataires } from "./reglages";
 
 export const hacherPin = (pin: unknown) => {
@@ -81,10 +81,12 @@ export async function espaceEnfant(enfantId: string) {
       .select({ entretienId: realisation.entretienId })
       .from(realisation)
       .where(and(isNotNull(realisation.enfantId), eq(realisation.date, jour))),
+    // Ses dernières missions : sa part des points.
     db
-      .select({ id: realisation.id, titre: realisation.titre, date: realisation.date, points: realisation.points, validation: realisation.validation })
-      .from(realisation)
-      .where(eq(realisation.enfantId, enfantId))
+      .select({ id: realisation.id, titre: realisation.titre, date: realisation.date, points: partMission.points, validation: realisation.validation })
+      .from(partMission)
+      .innerJoin(realisation, eq(realisation.id, partMission.realisationId))
+      .where(eq(partMission.enfantId, enfantId))
       .orderBy(desc(realisation.date), desc(realisation.creeLe), desc(sql`${realisation}.rowid`))
       .limit(15),
     db.select({ id: recompense.id, titre: recompense.titre, points: recompense.points }).from(recompense).where(eq(recompense.actif, true)).orderBy(asc(recompense.points)),
@@ -97,6 +99,13 @@ export async function espaceEnfant(enfantId: string) {
     compteDe(enfantId, jour),
   ]);
   const faites = new Set(faitesAujourdhui.map((f) => f.entretienId));
+  const parts = await partsDe(historique.map((h) => h.id));
+  // Les autres enfants : avec qui il a pu faire une mission.
+  const autres = await db
+    .select({ id: enfant.id, prenom: enfant.prenom })
+    .from(enfant)
+    .where(and(eq(enfant.actif, true), ne(enfant.id, enfantId)))
+    .orderBy(asc(enfant.prenom));
   // Missions partagées : avec qui.
   const avec = missions.length
     ? await db
@@ -107,6 +116,7 @@ export async function espaceEnfant(enfantId: string) {
         .orderBy(asc(missionTour.ordre))
     : [];
   return {
+    id: e.id,
     prenom: e.prenom,
     objectifSemaine: e.objectifSemaine,
     ...compte,
@@ -117,7 +127,8 @@ export async function espaceEnfant(enfantId: string) {
       faisable: faisable(m.echeance, jour, faites.has(m.id)),
       enRetard: m.echeance < jour,
     })),
-    historique,
+    historique: historique.map((h) => ({ ...h, avec: parts(h.id).filter((p) => p.enfantId !== enfantId).map((p) => p.prenom) })),
+    autres,
     recompenses,
     demandes,
   };
@@ -133,11 +144,31 @@ function prevenirParents(titre: string, corps: string) {
 }
 
 /**
+ * Les parts saisies : des enfants actifs, chacun une fois, des points entiers, et tous les points de la mission.
+ * Rien de saisi : tout à celui qui l'a cochée.
+ */
+async function partsValides(enfantId: string, total: number, saisies: Part[] | undefined): Promise<Part[]> {
+  if (!saisies?.length) return [{ enfantId, points: total }];
+  const parts = saisies.some((p) => p.enfantId === enfantId) ? saisies : [{ enfantId, points: 0 }, ...saisies];
+  if (new Set(parts.map((p) => p.enfantId)).size !== parts.length) throw new ErreurMetier("Chacun une seule fois.");
+  if (parts.some((p) => !Number.isInteger(p.points) || p.points < 0)) throw new ErreurMetier("Les points : des nombres entiers.");
+  const somme = parts.reduce((t, p) => t + p.points, 0);
+  if (somme !== total) throw new ErreurMetier(`Le partage doit faire ${total} pts (là : ${somme}).`);
+  const actifs = await db
+    .select({ id: enfant.id })
+    .from(enfant)
+    .where(and(eq(enfant.actif, true), inArray(enfant.id, parts.map((p) => p.enfantId))));
+  if (actifs.length !== parts.length) throw new ErreurMetier("Enfant inconnu.");
+  return parts;
+}
+
+/**
  * L'enfant a fait sa mission : consignée (points à valider par un parent), échéance suivante.
- * Partagée : celui qui la fait gagne les points, elle est faite pour tous.
+ * Confiée à plusieurs : le premier qui la fait la fait pour tous.
+ * Faite avec d'autres : les points sont partagés (`parts`, celui qui la coche compris ; à parts égales par défaut côté écran).
  * L'état d'avant est gardé : un parent qui refuse le remet en place.
  */
-export async function faireMission(enfantId: string, entretienId: string) {
+export async function faireMission(enfantId: string, entretienId: string, saisies?: Part[]) {
   const e = await enfantActif(enfantId);
   const [m] = await db.select().from(entretien).where(eq(entretien.id, entretienId));
   if (!e || !m || m.points == null || !m.actif || !(await missionDe(entretienId, enfantId))) throw new ErreurMetier("Cette mission n'est pas (ou plus) la tienne.", 404);
@@ -148,6 +179,7 @@ export async function faireMission(enfantId: string, entretienId: string) {
     .from(realisation)
     .where(and(eq(realisation.entretienId, entretienId), isNotNull(realisation.enfantId), eq(realisation.date, jour)));
   if (!faisable(m.echeance, jour, !!dejaFaite)) throw new ErreurMetier(dejaFaite ? "Déjà faite aujourd'hui." : "Pas encore : c'est pour plus tard.");
+  const parts = await partsValides(enfantId, m.points, saisies);
   const avant = JSON.stringify({
     echeance: m.echeance,
     echeanceInitiale: m.echeanceInitiale,
@@ -160,7 +192,9 @@ export async function faireMission(enfantId: string, entretienId: string) {
   });
   const id = await realiserEntretien(entretienId, { date: jour });
   await db.update(realisation).set({ enfantId, points: m.points, validation: "a_valider", avant }).where(eq(realisation.id, id));
-  prevenirParents("Mission faite", `${e.prenom} : ${m.titre} (${m.points} pts), à valider`);
+  await db.insert(partMission).values(parts.map((p) => ({ realisationId: id, ...p })));
+  const qui = (await partsDe([id]))(id).map((p) => p.prenom);
+  prevenirParents("Mission faite", `${qui.length > 1 ? `${qui.slice(0, -1).join(", ")} et ${qui.at(-1)}` : e.prenom} : ${m.titre} (${m.points} pts), à valider`);
   return id;
 }
 

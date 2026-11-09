@@ -43,6 +43,13 @@
       "when": 1793807017125,
       "tag": "0005_famille",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794231210729,
+      "tag": "0006_parts",
+      "breakpoints": true
     }
   ]
 }

@@ -4,12 +4,12 @@
  */
 import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db, newId } from "../db/client";
-import { echange, element, enfant, entretien, maison, missionTour, realisation, recompense } from "../db/schema";
+import { echange, element, enfant, entretien, maison, missionTour, partMission, realisation, recompense } from "../db/schema";
 import { aujourdhui } from "../lib/dates";
 import { ECHECS_PIN_MAX, OBJECTIF_DEFAUT } from "../lib/famille";
 import { ErreurMetier } from "../../serveur/erreurs";
 import { hacherPin, prevenirEnfant } from "../../serveur/famille";
-import { compteDe, reparerMissions, enfantsMission as enfantsDeMission, validerAutomatiquement } from "../../serveur/missions";
+import { compteDe, partsDe, reparerMissions, enfantsMission as enfantsDeMission, validerAutomatiquement } from "../../serveur/missions";
 import { supprimerSessionsEnfant } from "../../serveur/comptes";
 import { supprimerAbonnementsEnfant } from "../../serveur/reglages";
 import { utilisateurCourant } from "../../serveur/tracabilite";
@@ -72,6 +72,7 @@ export async function famille() {
     db.select().from(echange).orderBy(desc(echange.creeLe), desc(sql`${echange}.rowid`)).limit(20),
     db.select().from(recompense).orderBy(desc(recompense.actif), asc(recompense.points)),
   ]);
+  const parts = await partsDe([...aValider, ...recentes].map((r) => r.id));
   const tours = missions.length
     ? await db
         .select()
@@ -91,8 +92,8 @@ export async function famille() {
       })),
     ),
     missions: missions.map((m) => ({ ...m, enfants: tours.filter((t) => t.entretienId === m.id).map((t) => t.enfantId) })),
-    aValider,
-    recentes,
+    aValider: aValider.map((r) => ({ ...r, parts: parts(r.id) })),
+    recentes: recentes.map((r) => ({ ...r, parts: parts(r.id) })),
     demandes,
     recompenses,
   };
@@ -134,6 +135,19 @@ export async function changerPin(id: string, v: { pin: string }) {
 
 /** Supprime le profil, ses points et ses demandes ; ses missions partagées restent aux autres (ou ne sont plus des missions). */
 export async function supprimerEnfant(id: string) {
+  // Missions faites à plusieurs : les autres gardent leur part (et la mission, s'il l'avait cochée).
+  const siennes = await db.select({ realisationId: partMission.realisationId }).from(partMission).where(eq(partMission.enfantId, id));
+  const parts = await partsDe(siennes.map((p) => p.realisationId));
+  for (const { realisationId } of siennes) {
+    const autres = parts(realisationId).filter((p) => p.enfantId !== id);
+    if (autres.length) {
+      const [r] = await db.select({ enfantId: realisation.enfantId }).from(realisation).where(eq(realisation.id, realisationId));
+      await db
+        .update(realisation)
+        .set({ points: autres.reduce((t, p) => t + p.points, 0), ...(r?.enfantId === id ? { enfantId: autres[0].enfantId } : {}) })
+        .where(eq(realisation.id, realisationId));
+    }
+  }
   await db.update(realisation).set({ enfantId: null, points: null, validation: null, avant: null }).where(eq(realisation.enfantId, id));
   await db.delete(enfant).where(eq(enfant.id, id));
   supprimerSessionsEnfant(id);
@@ -153,7 +167,7 @@ async function aValider(realisationId: string) {
 export async function validerMission(realisationId: string) {
   const r = await aValider(realisationId);
   await db.update(realisation).set({ validation: "validee", validePar: utilisateurCourant(), valideLe: new Date().toISOString() }).where(eq(realisation.id, realisationId));
-  if (r.enfantId) prevenirEnfant(r.enfantId, { titre: "Mission validée", corps: `${r.titre} : +${r.points ?? 0} pts`, tag: `custos-mission-${r.id}` });
+  for (const p of (await partsDe([r.id]))(r.id)) prevenirEnfant(p.enfantId, { titre: "Mission validée", corps: `${r.titre} : +${p.points} pts`, tag: `custos-mission-${r.id}` });
 }
 
 /**
@@ -166,7 +180,8 @@ export async function refuserMission(realisationId: string, v: { motif?: string 
     .update(realisation)
     .set({ validation: "refusee", validePar: utilisateurCourant(), valideLe: new Date().toISOString(), ...(v.motif?.trim() ? { note: v.motif.trim() } : {}) })
     .where(eq(realisation.id, realisationId));
-  if (r.enfantId) prevenirEnfant(r.enfantId, { titre: "Mission refusée", corps: v.motif?.trim() ? `${r.titre} : ${v.motif.trim()}` : r.titre, tag: `custos-mission-${r.id}` });
+  for (const p of (await partsDe([r.id]))(r.id))
+    prevenirEnfant(p.enfantId, { titre: "Mission refusée", corps: v.motif?.trim() ? `${r.titre} : ${v.motif.trim()}` : r.titre, tag: `custos-mission-${r.id}` });
   if (!r.entretienId || !r.avant) return;
   const [derniere] = await db
     .select({ id: realisation.id })

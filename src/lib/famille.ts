@@ -1,6 +1,16 @@
 /** Famille : règles partagées par le serveur et le navigateur (semaines, codes PIN, points). */
 import { ajouter } from "./entretiens";
 
+/**
+ * Partage à parts égales : ce qui ne se divise pas va aux premiers (celui qui a coché la mission est en tête).
+ * partager(15, 2) = [8, 7].
+ */
+export function partager(total: number, n: number): number[] {
+  if (n < 1) return [];
+  const base = Math.floor(total / n);
+  return Array.from({ length: n }, (_, i) => base + (i < total % n ? 1 : 0));
+}
+
 export const POINTS_DEFAUT = 10;
 export const OBJECTIF_DEFAUT = 50;
 /** Une mission validée sans réponse d'un parent l'est d'office au bout de 48 h. */

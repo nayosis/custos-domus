@@ -5,7 +5,7 @@ import { rappelerMissions } from "../serveur/famille";
 import { reinitialiserLimitationEnfants } from "../serveur/routesEnfants";
 import { aujourdhui } from "../src/lib/dates";
 import { ajouter } from "../src/lib/entretiens";
-import { debutSemaine, faisable, finSemaine, pinValide } from "../src/lib/famille";
+import { debutSemaine, faisable, finSemaine, partager, pinValide } from "../src/lib/famille";
 import { SUPER, serveurDeTest } from "./outils-serveur";
 
 // Notifications : capturées au lieu d'être envoyées.
@@ -306,5 +306,61 @@ describe("notifications des enfants", () => {
     pushs.length = 0;
     await rappelerMissions(jour);
     expect(recus(tel)).toEqual([]);
+  });
+});
+
+describe("points partagés", () => {
+  test("faite à plusieurs : à parts égales ou ressaisies ; chacun sa part, validée ou refusée pour tous", async () => {
+    const a = await ok("creerEnfant", { prenom: "Nora", pin: "1111" });
+    const b = await ok("creerEnfant", { prenom: "Oscar", pin: "2222" });
+    const c = await ok("creerEnfant", { prenom: "Paul", pin: "3333" });
+    const { cookie: ca } = await connexionEnfant("Nora", "1111");
+    const { cookie: cb } = await connexionEnfant("Oscar", "2222");
+    const faitAvec = (id: string, parts: { enfantId: string; points: number }[]) => s.requete(`/api/enfant/missions/${id}/fait`, { corps: { parts }, cookie: ca });
+    expect(partager(15, 2)).toEqual([8, 7]);
+    expect(partager(10, 3)).toEqual([4, 3, 3]);
+    const autres = (await espace(ca)).autres.map((x: { prenom: string }) => x.prenom);
+    expect(autres).toEqual(expect.arrayContaining(["Oscar", "Paul"]));
+    expect(autres).not.toContain("Nora");
+
+    // Nora la coche, faite avec Oscar (mission confiée à Nora seule) : 8 + 7.
+    const m1 = await mission([a], { titre: "Laver la voiture", points: 15 });
+    expect((await faitAvec(m1, [{ enfantId: a, points: 8 }, { enfantId: b, points: 6 }])).status).toBe(400); // 14 ≠ 15
+    expect((await faitAvec(m1, [{ enfantId: a, points: 8 }, { enfantId: a, points: 7 }])).status).toBe(400);
+    expect((await faitAvec(m1, [{ enfantId: a, points: 8 }, { enfantId: "inconnu", points: 7 }])).status).toBe(400);
+    const r = await faitAvec(m1, [{ enfantId: a, points: 8 }, { enfantId: b, points: 7 }]);
+    expect(r.status).toBe(200);
+    expect((await r.json()).semaine.enAttente).toBe(8);
+    expect((await espace(cb)).semaine.enAttente).toBe(7);
+    expect((await espace(cb)).historique[0]).toMatchObject({ titre: "Laver la voiture", points: 7, avec: ["Nora"], validation: "a_valider" });
+
+    const f = await ok("famille");
+    const r1 = f.aValider.find((x: { titre: string }) => x.titre === "Laver la voiture");
+    expect(r1.parts).toEqual([
+      { enfantId: a, prenom: "Nora", points: 8 },
+      { enfantId: b, prenom: "Oscar", points: 7 },
+    ]);
+    pushs.length = 0;
+    await ok("validerMission", r1.id);
+    expect((await espace(ca)).solde).toBe(8);
+    expect((await espace(cb)).solde).toBe(7);
+
+    // Ressaisi : tout à Paul (Nora garde 0), puis refusée : personne n'a rien.
+    const m2 = await mission([a], { titre: "Ranger le garage", points: 20 });
+    await faitAvec(m2, [{ enfantId: c, points: 20 }]);
+    const r2 = (await ok("famille")).aValider.find((x: { titre: string }) => x.titre === "Ranger le garage");
+    expect(r2.parts.map((p: { prenom: string; points: number }) => [p.prenom, p.points])).toEqual([
+      ["Nora", 0],
+      ["Paul", 20],
+    ]);
+    await ok("refuserMission", r2.id);
+    const paul = (await ok("famille")).enfants.find((x: { id: string }) => x.id === c);
+    expect(paul.solde).toBe(0);
+
+    // Oscar supprimé : Nora garde sa part.
+    await ok("supprimerEnfant", b);
+    expect((await espace(ca)).solde).toBe(8);
+    const recente = (await ok("famille")).recentes.find((x: { id: string }) => x.id === r1.id);
+    expect(recente).toMatchObject({ enfantId: a, points: 8 });
   });
 });

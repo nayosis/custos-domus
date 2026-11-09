@@ -17,8 +17,8 @@ import {
 import type { Entretien, ModeleEntretien } from "../db/schema";
 import { aujourdhui, dateLisible, duree } from "../lib/dates";
 import {
-  ajouter, DELAI_DEFAUT, DUREES_RDV, echeanceApresPassage, estRecurrent, libelleDelai, libelleDuree, libelleHeure, libelleIntervalle, NATURES, situation, type Nature,
-  type Situation, type Unite,
+  ajouter, DELAI_DEFAUT, DUREES_RDV, echeanceApresPassage, estRecurrent, EXPLICATIONS_NATURE, libelleDelai, libelleDuree, libelleHeure, libelleIntervalle, NATURES, situation,
+  type Nature, type Situation, type Unite,
 } from "../lib/entretiens";
 import { ecrire } from "../lib/query";
 import { km, libelleKm } from "../lib/vehicules";
@@ -316,6 +316,9 @@ function ModalEntretien({
               { value: "routine", label: "Routine" },
             ]}
           />
+          <Text size="xs" c="dimmed" mt={4}>
+            {EXPLICATIONS_NATURE[v.nature]} Détails dans le menu, page Aide.
+          </Text>
         </div>
         <div>
           <Text size="sm" fw={500} mb={4}>

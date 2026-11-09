@@ -6,6 +6,7 @@ import { Accueil } from "./pages/Accueil";
 import { AFaire } from "./pages/AFaire";
 import { Vehicules } from "./pages/Vehicules";
 import { Famille } from "./pages/Famille";
+import { Aide } from "./pages/Aide";
 import { EspaceEnfant } from "./pages/EspaceEnfant";
 import { Elements } from "./pages/Elements";
 import { FicheElement } from "./pages/FicheElement";
@@ -84,13 +85,14 @@ export const ficheElementRoute = createRoute({
 const familleRoute = createRoute({ getParentRoute: () => application, path: "/famille", component: Famille });
 const vehicules = createRoute({ getParentRoute: () => application, path: "/vehicules", component: Vehicules });
 const prestataires = createRoute({ getParentRoute: () => application, path: "/prestataires", component: Prestataires });
+const aideRoute = createRoute({ getParentRoute: () => application, path: "/aide", component: Aide });
 const notificationsRoute = createRoute({ getParentRoute: () => application, path: "/notifications", component: Notifications });
 const sauvegarde = createRoute({ getParentRoute: () => application, path: "/sauvegarde", component: surOrdinateur(Sauvegarde, "Sauvegarde"), beforeLoad: reserveAdmin });
 const comptes = createRoute({ getParentRoute: () => application, path: "/comptes", component: surOrdinateur(Comptes, "Comptes"), beforeLoad: reserveAdmin });
 const journal = createRoute({ getParentRoute: () => application, path: "/journal", component: surOrdinateur(Journal, "Journal"), beforeLoad: reserveAdmin });
 
 export const router = createRouter({
-  routeTree: racine.addChildren([connexionRoute, lienRoute, enfantRoute, application.addChildren([accueilRoute, aFaireRoute, maisons, elementsRoute, ficheElementRoute, vehicules, familleRoute, prestataires, notificationsRoute, sauvegarde, comptes, journal])]),
+  routeTree: racine.addChildren([connexionRoute, lienRoute, enfantRoute, application.addChildren([accueilRoute, aFaireRoute, maisons, elementsRoute, ficheElementRoute, vehicules, familleRoute, prestataires, notificationsRoute, aideRoute, sauvegarde, comptes, journal])]),
   history: createBrowserHistory(),
 });
 

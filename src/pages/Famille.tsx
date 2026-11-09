@@ -177,7 +177,7 @@ function EnAttente({ d }: { d: Donnees }) {
                 {r.titre}
               </Text>
               <Text size="xs" c="dimmed">
-                {prenom(r.enfantId)} · {jourCourt(r.date)} · {points(r.points ?? 0)}
+                {r.parts.length > 1 ? r.parts.map((p) => `${p.prenom} ${p.points}`).join(" + ") + " pts" : `${prenom(r.enfantId)} · ${points(r.points ?? 0)}`} · {jourCourt(r.date)}
               </Text>
             </div>
             <Button size="xs" leftSection={<IconCheck size={14} />} onClick={() => ecrire(() => validerMission(r.id))}>
@@ -401,7 +401,7 @@ export function Famille() {
             <Group key={r.id} gap="sm" wrap="nowrap" py={4}>
               {r.validation === "validee" ? <IconCheck size={14} color="var(--mantine-color-green-6)" /> : <IconX size={14} color="var(--mantine-color-red-6)" />}
               <Text size="sm" style={{ flex: 1 }} truncate>
-                {prenom(r.enfantId)} · {r.titre}
+                {r.parts.length > 1 ? r.parts.map((p) => p.prenom).join(" et ") : prenom(r.enfantId)} · {r.titre}
               </Text>
               <Text size="xs" c="dimmed">
                 {jourCourt(r.date)} · {r.validation === "validee" ? `${r.points} pts${r.validePar === "auto" ? " (d'office)" : ""}` : "refusée"}

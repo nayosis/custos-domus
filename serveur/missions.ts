@@ -4,7 +4,7 @@
  */
 import { and, asc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { db } from "../src/db/client";
-import { echange, enfant, entretien, missionTour, realisation } from "../src/db/schema";
+import { echange, enfant, entretien, missionTour, partMission, realisation } from "../src/db/schema";
 import { aujourdhui } from "../src/lib/dates";
 import { debutSemaine, finSemaine, POINTS_DEFAUT, VALIDATION_AUTO_HEURES } from "../src/lib/famille";
 import { ErreurMetier } from "./erreurs";
@@ -63,20 +63,46 @@ export const validerAutomatiquement = () =>
     .set({ validation: "validee", validePar: "auto", valideLe: new Date().toISOString() })
     .where(and(eq(realisation.validation, "a_valider"), lte(realisation.creeLe, sql`datetime('now', ${`-${VALIDATION_AUTO_HEURES} hours`})`)));
 
-/** Points de la semaine (validés, et en attente de validation) et solde (validés, moins les récompenses demandées ou accordées). */
+export type Part = { enfantId: string; points: number };
+
+/** Les parts de ces réalisations (prénoms compris), par réalisation, celui qui l'a cochée en tête. */
+export async function partsDe(realisationIds: string[]) {
+  const parts = realisationIds.length
+    ? await db
+        .select({ realisationId: partMission.realisationId, enfantId: partMission.enfantId, prenom: enfant.prenom, points: partMission.points, coche: realisation.enfantId })
+        .from(partMission)
+        .innerJoin(enfant, eq(enfant.id, partMission.enfantId))
+        .innerJoin(realisation, eq(realisation.id, partMission.realisationId))
+        .where(inArray(partMission.realisationId, realisationIds))
+        .orderBy(asc(enfant.prenom))
+    : [];
+  const par = new Map<string, { enfantId: string; prenom: string; points: number }[]>();
+  for (const p of parts) {
+    const liste = par.get(p.realisationId) ?? [];
+    const part = { enfantId: p.enfantId, prenom: p.prenom, points: p.points };
+    if (p.enfantId === p.coche) liste.unshift(part);
+    else liste.push(part);
+    par.set(p.realisationId, liste);
+  }
+  return (id: string) => par.get(id) ?? [];
+}
+
+/** Points de la semaine (validés, et en attente de validation) et solde (validés, moins les récompenses demandées ou accordées), part par part. */
 export async function compteDe(enfantId: string, jour = aujourdhui()) {
   const [[semaine], [gagnes], [depenses]] = await Promise.all([
     db
       .select({
-        validees: sql<number>`coalesce(sum(case when ${realisation.validation} = 'validee' then ${realisation.points} end), 0)`,
-        enAttente: sql<number>`coalesce(sum(case when ${realisation.validation} = 'a_valider' then ${realisation.points} end), 0)`,
+        validees: sql<number>`coalesce(sum(case when ${realisation.validation} = 'validee' then ${partMission.points} end), 0)`,
+        enAttente: sql<number>`coalesce(sum(case when ${realisation.validation} = 'a_valider' then ${partMission.points} end), 0)`,
       })
-      .from(realisation)
-      .where(and(eq(realisation.enfantId, enfantId), gte(realisation.date, debutSemaine(jour)), lte(realisation.date, finSemaine(jour)))),
+      .from(partMission)
+      .innerJoin(realisation, eq(realisation.id, partMission.realisationId))
+      .where(and(eq(partMission.enfantId, enfantId), gte(realisation.date, debutSemaine(jour)), lte(realisation.date, finSemaine(jour)))),
     db
-      .select({ n: sql<number>`coalesce(sum(${realisation.points}), 0)` })
-      .from(realisation)
-      .where(and(eq(realisation.enfantId, enfantId), eq(realisation.validation, "validee"))),
+      .select({ n: sql<number>`coalesce(sum(${partMission.points}), 0)` })
+      .from(partMission)
+      .innerJoin(realisation, eq(realisation.id, partMission.realisationId))
+      .where(and(eq(partMission.enfantId, enfantId), eq(realisation.validation, "validee"))),
     db
       .select({ n: sql<number>`coalesce(sum(${echange.points}), 0)` })
       .from(echange)

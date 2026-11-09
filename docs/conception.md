@@ -92,11 +92,12 @@ les voitures, et les enfants à qui confier des choses. Décisions prises (novem
    `/api/enfant/*`, jamais aux fonctions RPC. **Mission** = une chose à faire avec des points (10 par défaut) et un ou
    plusieurs enfants (`mission_tour`) : un seul = la sienne (`entretien.enfant_id`) ; plusieurs = **partagée**
    (`enfant_id` vide) : chacun la voit, le premier qui la fait gagne les points, elle est faite pour tous. L'enfant coche « C'est fait » au plus deux jours
-   avant l'échéance, une fois par jour (tous enfants confondus) : réalisation à valider (`validation`, `points`, état d'avant gardé), push aux
+   avant l'échéance, une fois par jour (tous enfants confondus), seul ou **avec d'autres enfants** : les points sont alors partagés (à parts égales
+   par défaut, ressaisissables ; table `part_mission`, migration 0006, la part de chacun) : réalisation à valider (`validation`, `points`, état d'avant gardé), push aux
    parents. Validée par n'importe quel parent, d'office au bout de 48 h ; **refusée** : aucun point, la mission revient
    comme avant si rien n'a été fait depuis. Un parent qui coche « Fait » ne donne de points à personne. Objectif de
    points par semaine (du lundi au dimanche) ; **récompenses** définies par les parents, demandées par l'enfant (points
    réservés), accordées ou refusées (les points reviennent). Page **Famille** (`/famille`, dans « Plus », pastille quand
-   quelque chose attend). Codes PIN masqués dans le journal. **Notifications** sur le téléphone de l'enfant (table `abonnement_push_enfant`
+   quelque chose attend). Codes PIN masqués dans le journal. Page **Aide** (`/aide`, dans le menu) : tâche, rendez-vous et routine comparés. **Notifications** sur le téléphone de l'enfant (table `abonnement_push_enfant`
    dans comptes.db) : ses missions du jour et en retard à la tournée de 8 h, mission validée ou refusée, récompense
    accordée ou refusée ; retirées quand il quitte l'appareil (« Quitter »), quand le profil est désactivé ou supprimé. Ton sobre, pas enfantin.
