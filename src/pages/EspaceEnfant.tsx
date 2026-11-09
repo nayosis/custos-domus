@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Anchor, Badge, Button, Card, Center, Checkbox, Chip, Group, Loader, Modal, NumberInput, Paper, PasswordInput, Stack, Text, TextInput, Title } from "@mantine/core";
+import { Alert, Anchor, Badge, Box, Button, Card, Center, Checkbox, Chip, Group, Loader, Modal, NumberInput, Paper, PasswordInput, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconBell, IconCheck, IconGift, IconLogout } from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -330,7 +330,16 @@ function Notifications() {
 }
 
 /** L'espace d'un enfant : ses missions, sa semaine, ses points et ses récompenses. Rien d'autre. */
+/** La page défile dans son propre conteneur : html, body et #root sont fixes (overflow: hidden, voir styles.css). */
 export function EspaceEnfant() {
+  return (
+    <Box h="100dvh" style={{ overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+      <Contenu />
+    </Box>
+  );
+}
+
+function Contenu() {
   const client = useQueryClient();
   const { data: e, error, isLoading, refetch } = useQuery({
     queryKey: CLE,
