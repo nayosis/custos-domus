@@ -1,63 +1,36 @@
 import { Card, Group, List, Stack, Table, Text, Title } from "@mantine/core";
-import { IconCalendarEvent, IconRotateClockwise, IconTool } from "@tabler/icons-react";
-import { EXPLICATIONS_NATURE, NATURES, type Nature } from "../lib/entretiens";
+import { IconCalendarEvent, IconTool, IconUsers } from "@tabler/icons-react";
 
-const ICONES: Record<Nature, typeof IconTool> = { tache: IconTool, rdv: IconCalendarEvent, routine: IconRotateClockwise };
-const ORDRE: Nature[] = ["tache", "rdv", "routine"];
-
-/** Ce qui change selon la nature, ligne par ligne (les délais et l'ancrage restent modifiables sur chaque fiche). */
-const LIGNES: { critere: string; valeurs: Record<Nature, string> }[] = [
+/** Les trois réglages d'une chose à faire, chacun indépendant des autres. */
+const REGLAGES = [
   {
-    critere: "Pour",
-    valeurs: {
-      tache: "Ce qu'on fait soi-même : purger les radiateurs, nettoyer la VMC",
-      rdv: "Ce qu'il faut faire faire par quelqu'un : ramonage, révision de la chaudière",
-      routine: "Les petits gestes réguliers : poubelles, arrosage, draps",
-    },
+    icone: IconTool,
+    titre: "Tâche ou routine",
+    texte: "Une tâche se fait une fois (réparer le portillon). Une routine revient selon une fréquence : chaque semaine, chaque mois, chaque année.",
   },
   {
-    critere: "Alerte",
-    valeurs: { tache: "1 semaine avant l'échéance", rdv: "6 semaines avant, le temps de trouver un créneau", routine: "Le jour même" },
+    icone: IconUsers,
+    titre: "Qui s'en charge",
+    texte: "Nous, un prestataire (le ramoneur, le garage), ou les enfants : c'est alors une mission, avec des points.",
   },
   {
-    critere: "Étapes",
-    valeurs: {
-      tache: "À faire → Fait",
-      rdv: "À prendre → Rendez-vous pris (date, heure, prestataire) → Fait",
-      routine: "À faire → Fait",
-    },
-  },
-  {
-    critere: "« Fait »",
-    valeurs: {
-      tache: "Date, coût, prestataire, note, facture",
-      rdv: "Date, coût, prestataire, note, facture",
-      routine: "En un geste, à la date du jour, sans coût ni prestataire",
-    },
-  },
-  {
-    critere: "Fois suivante",
-    valeurs: {
-      tache: "Date réelle + intervalle : en retard, tout se décale",
-      rdv: "Date réelle + intervalle",
-      routine: "Calendrier fixe : la poubelle du mercredi reste le mercredi, même sortie en retard",
-    },
-  },
-  {
-    critere: "Rappels",
-    valeurs: {
-      tache: "Pendant la fenêtre d'alerte, relance chaque semaine tant que ce n'est pas fait",
-      rdv: "Relance tant que le rendez-vous n'est pas pris, puis rappel la veille du rendez-vous",
-      routine: "Le jour même ; absente de « Prochainement »",
-    },
-  },
-  {
-    critere: "Agenda",
-    valeurs: { tache: "L'échéance", rdv: "Le rendez-vous à son heure, alarme 1 h avant", routine: "L'échéance" },
+    icone: IconCalendarEvent,
+    titre: "Prendre rendez-vous d'abord",
+    texte: "Une étape en plus, « rendez-vous pris », pour ne pas oublier d'appeler. Cochée d'office avec un prestataire ; possible sans (contrôle technique).",
   },
 ];
 
-/** Aide : ce qui distingue tâche, rendez-vous et routine, et comment marchent les missions des enfants. */
+/** Ce qui découle des réglages (les valeurs par défaut restent modifiables sur chaque fiche). */
+const LIGNES: { critere: string; valeur: string }[] = [
+  { critere: "Alerte", valeur: "6 semaines avant avec rendez-vous ; le jour même pour ce qui revient chaque jour ou chaque semaine ; sinon 1 semaine avant." },
+  { critere: "Fois suivante", valeur: "À date fixe pour ce qui revient chaque jour ou semaine (la poubelle du mercredi reste le mercredi) ; sinon depuis la dernière fois (la vidange)." },
+  { critere: "« Fait »", valeur: "En un geste, à la date du jour, quand c'est nous ou les enfants. Avec un prestataire ou un rendez-vous : date, coût, prestataire, facture." },
+  { critere: "Une tâche faite", valeur: "Elle sort de la liste et reste dans l'historique." },
+  { critere: "Une routine faite", valeur: "Elle revient seule à la date suivante ; reportez-la si le moment n'est pas venu (hiverner le salon de jardin quand le froid arrive)." },
+  { critere: "Rendez-vous", valeur: "Relancé tant qu'il n'est pas pris, puis rappel la veille ; dans l'agenda à son heure, alarme 1 h avant." },
+];
+
+/** Aide : comment se décrit une chose à faire, et comment marchent les missions des enfants. */
 export function Aide() {
   return (
     <Stack gap="lg" maw={960}>
@@ -65,51 +38,32 @@ export function Aide() {
 
       <Card withBorder>
         <Title order={4} mb="xs">
-          Tâche, rendez-vous ou routine ?
+          Une chose à faire, trois réglages
         </Title>
-        <Text size="sm" c="dimmed" mb="sm">
-          Les trois sont des choses à faire : une échéance, et une répétition possible (tous les N jours, semaines, mois ou ans) ou une seule fois. Seule la
-          nature change leur comportement.
-        </Text>
         <Stack gap="xs" mb="md">
-          {ORDRE.map((n) => {
-            const Icone = ICONES[n];
-            return (
-              <Group key={n} gap="sm" wrap="nowrap" align="flex-start">
-                <Icone size={18} color="var(--mantine-color-brique-6)" style={{ flexShrink: 0, marginTop: 2 }} />
-                <Text size="sm">
-                  <b>{NATURES[n]}</b> : {EXPLICATIONS_NATURE[n].charAt(0).toLowerCase() + EXPLICATIONS_NATURE[n].slice(1)}
-                </Text>
-              </Group>
-            );
-          })}
+          {REGLAGES.map((r) => (
+            <Group key={r.titre} gap="sm" wrap="nowrap" align="flex-start">
+              <r.icone size={18} color="var(--mantine-color-brique-6)" style={{ flexShrink: 0, marginTop: 2 }} />
+              <Text size="sm">
+                <b>{r.titre}</b> : {r.texte.charAt(0).toLowerCase() + r.texte.slice(1)}
+              </Text>
+            </Group>
+          ))}
         </Stack>
-        <Table.ScrollContainer minWidth={640}>
-          <Table withTableBorder withColumnBorders verticalSpacing="xs" fz="sm">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th />
-                {ORDRE.map((n) => (
-                  <Table.Th key={n}>{NATURES[n]}</Table.Th>
-                ))}
+        <Table withTableBorder withColumnBorders verticalSpacing="xs" fz="sm">
+          <Table.Tbody>
+            {LIGNES.map((l) => (
+              <Table.Tr key={l.critere}>
+                <Table.Th scope="row" style={{ whiteSpace: "nowrap", verticalAlign: "top" }}>
+                  {l.critere}
+                </Table.Th>
+                <Table.Td>{l.valeur}</Table.Td>
               </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {LIGNES.map((l) => (
-                <Table.Tr key={l.critere}>
-                  <Table.Th scope="row" style={{ whiteSpace: "nowrap" }}>
-                    {l.critere}
-                  </Table.Th>
-                  {ORDRE.map((n) => (
-                    <Table.Td key={n}>{l.valeurs[n]}</Table.Td>
-                  ))}
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Table.ScrollContainer>
+            ))}
+          </Table.Tbody>
+        </Table>
         <Text size="xs" c="dimmed" mt="xs">
-          Délai d'alerte et calcul de la fois suivante sont des réglages par défaut, modifiables sur chaque fiche.
+          Délai d'alerte et calcul de la fois suivante sont des valeurs par défaut, modifiables sur chaque fiche.
         </Text>
       </Card>
 

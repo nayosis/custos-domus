@@ -3,32 +3,31 @@
  * Dates : chaînes « AAAA-MM-JJ ».
  */
 
-export type Nature = "tache" | "rdv" | "routine";
 export type Unite = "jour" | "semaine" | "mois" | "an";
 export type Ancrage = "realisation" | "fixe";
 
-export const NATURES: Record<Nature, string> = { tache: "Tâche", rdv: "Rendez-vous", routine: "Routine" };
+/** Qui s'en charge : un seul choix. */
+export type Qui = "nous" | "prestataire" | "enfants";
+export const QUI: Record<Qui, string> = { nous: "Nous", prestataire: "Un prestataire", enfants: "Les enfants" };
 
-/** Ce qui distingue les trois natures, en une phrase (formulaire et page Aide). */
-export const EXPLICATIONS_NATURE: Record<Nature, string> = {
-  tache: "L'entretien qu'on fait soi-même.",
-  rdv: "Un entretien qu'il faut d'abord organiser : son étape en plus, « rendez-vous pris », sert à ne pas oublier d'appeler.",
-  routine: "La corvée répétitive : légère, sans historique de coûts, et calée sur un calendrier fixe.",
-};
+/** Confiée aux enfants (des points), sinon à un prestataire s'il y en a un, sinon à nous. */
+export const quiDe = (e: { points?: number | null; prestataireId?: string | null }): Qui =>
+  e.points != null ? "enfants" : e.prestataireId ? "prestataire" : "nous";
+
 export const UNITES: Record<Unite, { un: string; plusieurs: string }> = {
   jour: { un: "jour", plusieurs: "jours" },
   semaine: { un: "semaine", plusieurs: "semaines" },
   mois: { un: "mois", plusieurs: "mois" },
   an: { un: "an", plusieurs: "ans" },
 };
-export const estNature = (x: unknown): x is Nature => x === "tache" || x === "rdv" || x === "routine";
 export const estUnite = (x: unknown): x is Unite => typeof x === "string" && Object.hasOwn(UNITES, x);
 
 /**
- * Délai d'alerte par défaut : un rendez-vous se prend tôt (6 semaines), une tâche se fait vite (1 semaine),
- * une routine se rappelle le jour même.
+ * Délai d'alerte par défaut : un rendez-vous se prend tôt (6 semaines) ; ce qui revient chaque jour ou chaque
+ * semaine se rappelle le jour même ; le reste, une semaine avant.
  */
-export const DELAI_DEFAUT: Record<Nature, number> = { rdv: 42, tache: 7, routine: 0 };
+export const delaiDefaut = (e: { avecRdv?: boolean | null; intervalleValeur?: number | null; intervalleUnite?: string | null }) =>
+  e.avecRdv ? 42 : estFrequente(e) ? 0 : 7;
 
 /** Où se trouve une chose à faire : « Pompe à chaleur, Maison principale », la maison seule, ou le véhicule seul. */
 export const lieu = (e: { elementNom?: string | null; maisonNom: string | null }, separateur = ", ") =>
@@ -62,6 +61,20 @@ export const joursEntre = (de: string, a: string) => Math.round((enDate(a).getTi
 type Recurrence = { intervalleValeur: number | null; intervalleUnite: string | null; ancrage: string; echeance: string; echeanceInitiale?: string | null };
 
 export const estRecurrent = (e: { intervalleValeur?: number | null; intervalleUnite?: string | null }) => !!e.intervalleValeur && estUnite(e.intervalleUnite);
+
+/** Une routine revient (un intervalle) ; une tâche se fait une fois. */
+export const estRoutine = estRecurrent;
+export const genre = (e: { intervalleValeur?: number | null; intervalleUnite?: string | null }) => (estRoutine(e) ? "Routine" : "Tâche");
+
+/** Revient chaque jour ou chaque semaine (poubelles, arrosage) : rappelée le jour même, absente de « plus tard ». */
+export const estFrequente = (e: { intervalleValeur?: number | null; intervalleUnite?: string | null }) =>
+  estRecurrent(e) && (e.intervalleUnite === "jour" || e.intervalleUnite === "semaine");
+
+/**
+ * « Fait » en un geste (date du jour, sans formulaire) : quand c'est nous ou les enfants, sans rendez-vous.
+ * Prestataire ou rendez-vous : le formulaire (date, coût, facture).
+ */
+export const faitEnUnGeste = (e: { avecRdv: boolean; points?: number | null; prestataireId?: string | null }) => !e.avecRdv && quiDe(e) !== "prestataire";
 
 /**
  * Échéance suivante quand l'entretien est fait le `date`, ou null s'il est ponctuel (il est alors clos).

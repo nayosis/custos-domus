@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import {
-  ActionIcon, Alert, Badge, Box, Button, Card, Collapse, Group, Menu, Modal, MultiSelect, NumberInput, Radio, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Textarea, Title, UnstyledButton,
+  ActionIcon, Alert, Badge, Box, Button, Card, Checkbox, Collapse, Group, Menu, Modal, MultiSelect, NumberInput, Radio, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Textarea, Title, UnstyledButton,
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
@@ -17,8 +17,8 @@ import {
 import type { Entretien, ModeleEntretien } from "../db/schema";
 import { aujourdhui, dateLisible, duree } from "../lib/dates";
 import {
-  ajouter, DELAI_DEFAUT, DUREES_RDV, echeanceApresPassage, estRecurrent, EXPLICATIONS_NATURE, libelleDelai, libelleDuree, libelleHeure, libelleIntervalle, NATURES, situation,
-  type Nature, type Situation, type Unite,
+  ajouter, delaiDefaut, DUREES_RDV, echeanceApresPassage, estFrequente, estRecurrent, faitEnUnGeste, genre, libelleDelai, libelleDuree, libelleHeure, libelleIntervalle, situation,
+  type Situation, type Unite,
 } from "../lib/entretiens";
 import { ecrire } from "../lib/query";
 import { km, libelleKm } from "../lib/vehicules";
@@ -29,7 +29,6 @@ import { ModalRealisation } from "./ModalRealisation";
 
 export type LigneEntretien = Entretien & { prestataireNom: string | null };
 
-/** Icône d'une chose à faire selon sa nature. */
 /** Mission : le prénom de l'enfant (« Enfants » si elle est partagée, ou de celui qui l'a faite) et les points. */
 export function BadgeMission({ e, suffixe }: { e: { points: number | null; enfantId: string | null }; suffixe?: string }) {
   const { data: enfants = [] } = useQuery({ queryKey: ["enfants"], queryFn: () => listeEnfants(), enabled: e.points != null });
@@ -42,18 +41,19 @@ export function BadgeMission({ e, suffixe }: { e: { points: number | null; enfan
   );
 }
 
-export const IconeNature = ({ nature, size = 20 }: { nature: string; size?: number }) => {
-  const Icone = nature === "rdv" ? IconCalendarEvent : nature === "routine" ? IconRotateClockwise : IconTool;
+/** Icône d'une chose à faire : rendez-vous à prendre, routine (elle revient) ou tâche. */
+export const IconeChose = ({ e, size = 20 }: { e: { avecRdv: boolean; intervalleValeur: number | null; intervalleUnite: string | null }; size?: number }) => {
+  const Icone = e.avecRdv ? IconCalendarEvent : estRecurrent(e) ? IconRotateClockwise : IconTool;
   return <Icone size={size} color="var(--mantine-color-brique-6)" style={{ flexShrink: 0 }} />;
 };
 
-/** Routine : « Fait » en un geste, à la date du jour, sans fenêtre. */
-export async function faireRoutine(e: Pick<Entretien, "id" | "titre">) {
+/** « Fait » en un geste, à la date du jour, sans fenêtre (nous ou les enfants, sans rendez-vous : voir faitEnUnGeste). */
+export async function faireEnUnGeste(e: Pick<Entretien, "id" | "titre">) {
   if ((await ecrire<unknown>(() => realiserEntretien(e.id))) !== undefined) notifications.show({ color: "green", message: `${e.titre} : fait` });
 }
 
 /** Badge d'état : en retard (rouge), à prévoir (orange), rendez-vous pris (bleu), à venir (gris). */
-export function BadgeSituation({ e, s }: { e: Pick<Entretien, "nature" | "echeance"> & { heureRdv?: string | null }; s: Situation }) {
+export function BadgeSituation({ e, s }: { e: Pick<Entretien, "avecRdv" | "echeance"> & { heureRdv?: string | null }; s: Situation }) {
   const style = { textTransform: "none", flexShrink: 0 } as const;
   switch (s.etat) {
     case "en_retard":
@@ -65,7 +65,7 @@ export function BadgeSituation({ e, s }: { e: Pick<Entretien, "nature" | "echean
     case "a_prevoir":
       return (
         <Badge color="orange" variant="light" style={style}>
-          {e.nature === "rdv" ? "À prendre" : "À faire"} · {s.jours === 0 ? "aujourd'hui" : `dans ${duree(s.jours)}`}
+          {e.avecRdv ? "À prendre" : "À faire"} · {s.jours === 0 ? "aujourd'hui" : `dans ${duree(s.jours)}`}
         </Badge>
       );
     case "rdv_pris":
@@ -93,11 +93,13 @@ export function BadgeSituation({ e, s }: { e: Pick<Entretien, "nature" | "echean
 
 type Saisie = {
   titre: string;
-  nature: Nature;
+  /** Il faut d'abord prendre rendez-vous. */
+  avecRdv: boolean;
   periodique: boolean;
   intervalleValeur: number | string;
   intervalleUnite: Unite;
   ancrage: "realisation" | "fixe";
+  ancrageModifie: boolean;
   derniere: string | null;
   echeance: string | null;
   delai: number | string;
@@ -112,14 +114,15 @@ type Saisie = {
 
 const VIDE: Saisie = {
   titre: "",
-  nature: "tache",
+  avecRdv: false,
   periodique: true,
   intervalleValeur: 1,
   intervalleUnite: "an",
   ancrage: "realisation",
+  ancrageModifie: false,
   derniere: null,
   echeance: null,
-  delai: DELAI_DEFAUT.tache,
+  delai: 7,
   delaiModifie: false,
   prestataireId: null,
   notes: "",
@@ -128,13 +131,27 @@ const VIDE: Saisie = {
   kmDerniere: "",
 };
 
+/**
+ * Défauts qui suivent la saisie tant qu'on ne les a pas changés : le délai d'alerte (rendez-vous, fréquence),
+ * et le rythme : à date fixe pour ce qui revient chaque jour ou semaine (la poubelle du mercredi), sinon depuis la dernière fois.
+ */
+function avecDefauts(s: Saisie): Saisie {
+  const rythme = { avecRdv: s.avecRdv, intervalleValeur: s.periodique && typeof s.intervalleValeur === "number" ? s.intervalleValeur : null, intervalleUnite: s.periodique ? s.intervalleUnite : null };
+  return {
+    ...s,
+    ...(s.delaiModifie ? {} : { delai: delaiDefaut(rythme) }),
+    ...(s.ancrageModifie ? {} : { ancrage: estFrequente(rythme) ? "fixe" : "realisation" }),
+  };
+}
+
 const depuis = (e: Entretien): Saisie => ({
   titre: e.titre,
-  nature: e.nature as Nature,
+  avecRdv: e.avecRdv,
   periodique: estRecurrent(e) || !!e.intervalleKm,
   intervalleValeur: e.intervalleValeur ?? 1,
   intervalleUnite: (e.intervalleUnite as Unite) ?? "an",
   ancrage: e.ancrage === "fixe" ? "fixe" : "realisation",
+  ancrageModifie: true,
   derniere: null,
   echeance: e.echeance,
   delai: e.delaiAlerteJours,
@@ -200,10 +217,10 @@ function ModalEntretien({
   if (ouverture !== cle) {
     setCle(ouverture);
     setModele(null);
-    // Sur la maison elle-même, on ajoute surtout des routines (poubelles, tonte…).
-    if (opened) setV(entretien ? depuis(entretien) : ou.maisonId ? { ...VIDE, nature: "routine", delai: DELAI_DEFAUT.routine, ancrage: "fixe", intervalleUnite: "semaine" } : VIDE);
+    // Sur la maison elle-même, on ajoute surtout des routines de la semaine (poubelles, tonte…).
+    if (opened) setV(entretien ? depuis(entretien) : ou.maisonId ? avecDefauts({ ...VIDE, intervalleUnite: "semaine" }) : avecDefauts(VIDE));
   }
-  const maj = (p: Partial<Saisie>) => setV((s) => ({ ...s, ...p }));
+  const maj = (p: Partial<Saisie>) => setV((s) => avecDefauts({ ...s, ...p }));
   const { champ: champMission, mission } = useMission(entretien, opened);
 
   // Modèles de la catégorie de l'élément en premier, puis les autres.
@@ -223,14 +240,13 @@ function ModalEntretien({
     if (!m) return;
     maj({
       titre: m.titre,
-      nature: m.nature as Nature,
+      avecRdv: m.avecRdv,
       periodique: estRecurrent(m),
       intervalleValeur: m.intervalleValeur ?? 1,
       intervalleUnite: (m.intervalleUnite as Unite) ?? "an",
       intervalleKm: vehicule ? (m.intervalleKm ?? "") : "",
       delai: m.delaiAlerteJours,
-      ...(m.nature === "routine" ? { ancrage: "fixe" as const } : {}),
-      delaiModifie: false,
+      delaiModifie: true,
     });
   };
 
@@ -238,7 +254,8 @@ function ModalEntretien({
   // Échéance qui sera retenue à la création : saisie, sinon dernière fois + intervalle, sinon aujourd'hui.
   const echeancePrevue = v.echeance ?? (v.periodique && v.derniere && valeur ? ajouter(v.derniere, valeur, v.intervalleUnite) : aujourdhui());
   const delai = typeof v.delai === "number" ? v.delai : 0;
-  const routine = v.nature === "routine";
+  // Qui s'en charge : un seul choix ; confiée aux enfants, pas de prestataire.
+  const auxEnfants = !!mission?.enfants.length;
   const intervalleKm = vehicule && v.periodique && typeof v.intervalleKm === "number" && v.intervalleKm >= 100 ? v.intervalleKm : null;
   // Au kilométrage, l'intervalle de temps devient facultatif (« tous les 40 000 km »).
   const valide = v.titre.trim() && (!v.periodique || valeur >= 1 || intervalleKm) && typeof v.delai === "number" && (!entretien || v.echeance);
@@ -246,13 +263,13 @@ function ModalEntretien({
   const enregistrer = async () => {
     const valeurs = {
       titre: v.titre,
-      nature: v.nature,
+      avecRdv: v.avecRdv,
       intervalleValeur: v.periodique && valeur ? valeur : null,
       intervalleUnite: v.periodique && valeur ? v.intervalleUnite : null,
       intervalleKm,
       ancrage: v.ancrage,
       delaiAlerteJours: delai,
-      prestataireId: routine ? null : v.prestataireId,
+      prestataireId: auxEnfants ? null : v.prestataireId,
       notes: v.notes,
       ...(mission !== undefined ? { mission } : {}),
     };
@@ -297,31 +314,6 @@ function ModalEntretien({
         <TextInput label="Titre" placeholder={ou.maisonId ? "Sortir la poubelle verte, tondre la pelouse…" : "Entretien annuel, nettoyage du filtre…"} required value={v.titre} onChange={(e) => maj({ titre: e.currentTarget.value })} data-autofocus={!!entretien} />
         <div>
           <Text size="sm" fw={500} mb={4}>
-            Nature
-          </Text>
-          <SegmentedControl
-            fullWidth
-            value={v.nature}
-            onChange={(n) =>
-              maj({
-                nature: n as Nature,
-                ...(v.delaiModifie ? {} : { delai: DELAI_DEFAUT[n as Nature] }),
-                // Une routine garde ses jours (le ramassage du mercredi), même faite en avance ou en retard.
-                ...(n === "routine" && !entretien ? { ancrage: "fixe" as const } : {}),
-              })
-            }
-            data={[
-              { value: "tache", label: "Tâche" },
-              { value: "rdv", label: "Rendez-vous" },
-              { value: "routine", label: "Routine" },
-            ]}
-          />
-          <Text size="xs" c="dimmed" mt={4}>
-            {EXPLICATIONS_NATURE[v.nature]} Détails dans le menu, page Aide.
-          </Text>
-        </div>
-        <div>
-          <Text size="sm" fw={500} mb={4}>
             Fréquence
           </Text>
           <SegmentedControl
@@ -329,8 +321,8 @@ function ModalEntretien({
             value={v.periodique ? "oui" : "non"}
             onChange={(x) => maj({ periodique: x === "oui" })}
             data={[
-              { value: "oui", label: "Périodique" },
-              { value: "non", label: "Une seule fois" },
+              { value: "oui", label: "Routine : elle revient" },
+              { value: "non", label: "Tâche : une seule fois" },
             ]}
           />
         </div>
@@ -396,7 +388,7 @@ function ModalEntretien({
                   ))}
               </SimpleGrid>
             )}
-            <Radio.Group label="Échéance suivante" value={v.ancrage} onChange={(a) => maj({ ancrage: a as Saisie["ancrage"] })}>
+            <Radio.Group label="Échéance suivante" value={v.ancrage} onChange={(a) => maj({ ancrage: a as Saisie["ancrage"], ancrageModifie: true })}>
               <Stack gap={6} mt={4}>
                 <Radio value="realisation" label="Comptée depuis le jour où c'est fait" />
                 <Radio value="fixe" label="À date fixe (garder le même calendrier, même en cas de retard)" />
@@ -418,7 +410,7 @@ function ModalEntretien({
         </SimpleGrid>
         <NumberInput
           label="Me prévenir"
-          description={delai ? `${libelleDelai(delai)} avant l'échéance${v.nature === "rdv" ? " : le temps de trouver un créneau" : ""}` : "Le jour de l'échéance"}
+          description={delai ? `${libelleDelai(delai)} avant l'échéance${v.avecRdv ? " : le temps de trouver un créneau" : ""}` : "Le jour de l'échéance"}
           suffix=" jours avant"
           min={0}
           max={3650}
@@ -426,14 +418,14 @@ function ModalEntretien({
           value={v.delai}
           onChange={(x) => maj({ delai: x, delaiModifie: true })}
         />
-        {routine ? (
-          <Text size="xs" c="dimmed">
-            Routine : « Fait » en un geste, sans coût ni prestataire. À noter le jour où il faut le faire (la veille du ramassage pour les poubelles).
-          </Text>
-        ) : (
-          <ChampPrestataire label="Prestataire habituel" value={v.prestataireId} onChange={(p) => maj({ prestataireId: p })} />
-        )}
+        {!auxEnfants && <ChampPrestataire label="Prestataire habituel" value={v.prestataireId} onChange={(p) => maj({ prestataireId: p, ...(p && !v.prestataireId ? { avecRdv: true } : {}) })} />}
         {champMission}
+        <Checkbox
+          label="Il faut d'abord prendre rendez-vous"
+          description="Une étape en plus, « rendez-vous pris » : relancé tant qu'il n'est pas pris, puis rappel la veille."
+          checked={v.avecRdv}
+          onChange={(x) => maj({ avecRdv: x.currentTarget.checked })}
+        />
         <Textarea label="Notes" autosize minRows={2} value={v.notes} onChange={(e) => maj({ notes: e.currentTarget.value })} />
         <Button onClick={enregistrer} disabled={!valide}>
           Enregistrer
@@ -547,7 +539,7 @@ function Ligne({
   e, onModifier, onRdv, onFait, onEcheance,
 }: { e: LigneEntretien; onModifier: () => void; onRdv: () => void; onFait: () => void; onEcheance: (mode: "passer" | "reporter") => void }) {
   const s = situation(e, aujourdhui());
-  const aPrendre = e.actif && e.nature === "rdv" && e.etat !== "rdv_pris";
+  const aPrendre = e.actif && e.avecRdv && e.etat !== "rdv_pris";
   // Bouton d'action seulement quand c'est d'actualité ; sinon, dans le menu.
   const urgent = s.etat === "en_retard" || s.etat === "a_prevoir" || s.etat === "rdv_pris";
   const supprimer = () =>
@@ -570,7 +562,7 @@ function Ligne({
   return (
     <Group gap="sm" wrap="nowrap" py="xs" align="flex-start" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }} opacity={e.actif ? 1 : 0.6}>
       <Box mt={2}>
-        <IconeNature nature={e.nature} />
+        <IconeChose e={e} />
       </Box>
       <Box style={{ flex: 1, minWidth: 0 }}>
         <Group gap="xs">
@@ -581,7 +573,8 @@ function Ligne({
           <BadgeMission e={e} />
         </Group>
         <Text size="xs" c="dimmed">
-          {NATURES[e.nature as Nature]}
+          {genre(e)}
+          {e.avecRdv ? " sur rendez-vous" : ""}
           {details.length > 0 && ` · ${details.join(" · ")}`}
         </Text>
         {e.notes && (
@@ -669,7 +662,7 @@ export function Entretiens({
       e={e}
       onModifier={() => setEdition({ entretien: e })}
       onRdv={() => setRdv(e)}
-      onFait={() => (e.nature === "routine" ? faireRoutine(e) : setFait(e))}
+      onFait={() => (faitEnUnGeste(e) ? faireEnUnGeste(e) : setFait(e))}
       onEcheance={(mode) => setEcheance({ e, mode })}
     />
   );

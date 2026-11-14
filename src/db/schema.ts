@@ -95,8 +95,11 @@ export const entretien = sqliteTable(
     elementId: text("element_id").references(() => element.id, { onDelete: "cascade" }),
     maisonId: text("maison_id").references(() => maison.id, { onDelete: "cascade" }),
     titre: text("titre").notNull(),
-    /** tache, rdv, routine */
-    nature: text("nature").notNull().default("tache"),
+    /**
+     * Il faut d'abord prendre rendez-vous (prestataire, contrôle technique…) : étape « rendez-vous pris » en plus.
+     * Le reste se déduit : avec un intervalle c'est une routine, sans c'est une tâche ; qui s'en charge, voir lib/entretiens (quiDe).
+     */
+    avecRdv: integer("avec_rdv", { mode: "boolean" }).notNull().default(false),
     intervalleValeur: integer("intervalle_valeur"),
     /** jour, semaine, mois, an */
     intervalleUnite: text("intervalle_unite"),
@@ -197,7 +200,7 @@ export const modeleEntretien = sqliteTable("modele_entretien", {
   id: id(),
   titre: text("titre").notNull(),
   categorie: text("categorie"),
-  nature: text("nature").notNull().default("tache"),
+  avecRdv: integer("avec_rdv", { mode: "boolean" }).notNull().default(false),
   intervalleValeur: integer("intervalle_valeur"),
   intervalleUnite: text("intervalle_unite"),
   intervalleKm: integer("intervalle_km"),

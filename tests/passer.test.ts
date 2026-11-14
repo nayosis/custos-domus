@@ -82,7 +82,7 @@ describe("passer et reporter", () => {
 
   test("passer un rendez-vous pris l'annule ; une action ponctuelle passée est close", async () => {
     const el = await nouvelElement("Chaudière");
-    const rdv = await ok("creerEntretien", { elementId: el, titre: "Entretien annuel", nature: "rdv", intervalleValeur: 1, intervalleUnite: "an", echeance: jour });
+    const rdv = await ok("creerEntretien", { elementId: el, titre: "Entretien annuel", avecRdv: true, intervalleValeur: 1, intervalleUnite: "an", echeance: jour });
     await ok("prendreRdv", rdv, { dateRdv: ajouter(jour, 3, "jour"), heureRdv: "14h" });
     await ok("passerEcheance", rdv);
     expect(await entretienDe(el, rdv)).toMatchObject({ etat: "a_faire", dateRdv: null, heureRdv: null, dureeRdvMinutes: null, echeance: ajouter(jour, 1, "an") });
@@ -122,7 +122,7 @@ describe("passer et reporter", () => {
 describe("rendez-vous avec heure", () => {
   test("heure et durée ; 1 h par défaut ; refus d'une heure invalide ou sans date", async () => {
     const el = await nouvelElement("PAC");
-    const id = await ok("creerEntretien", { elementId: el, titre: "Entretien PAC", nature: "rdv", intervalleValeur: 1, intervalleUnite: "an", echeance: jour });
+    const id = await ok("creerEntretien", { elementId: el, titre: "Entretien PAC", avecRdv: true, intervalleValeur: 1, intervalleUnite: "an", echeance: jour });
     await ok("prendreRdv", id, { dateRdv: "2026-11-20", heureRdv: "14:00", dureeRdvMinutes: 90 });
     expect(await entretienDe(el, id)).toMatchObject({ etat: "rdv_pris", dateRdv: "2026-11-20", heureRdv: "14:00", dureeRdvMinutes: 90 });
     await ok("prendreRdv", id, { dateRdv: "2026-11-20", heureRdv: "9h30" });
@@ -137,7 +137,7 @@ describe("rendez-vous avec heure", () => {
 
   test("agenda : créneau en UTC avec alarme une heure avant ; lien de la famille, régénéré par un admin", async () => {
     const el = await nouvelElement("Chaudière gaz");
-    const id = await ok("creerEntretien", { elementId: el, titre: "Ramonage", nature: "rdv", intervalleValeur: 1, intervalleUnite: "an", echeance: jour });
+    const id = await ok("creerEntretien", { elementId: el, titre: "Ramonage", avecRdv: true, intervalleValeur: 1, intervalleUnite: "an", echeance: jour });
     await ok("prendreRdv", id, { dateRdv: "2026-12-01", heureRdv: "14:00", dureeRdvMinutes: 90 });
 
     const etat = await (await s.requete("/api/notifications", { cookie })).json();

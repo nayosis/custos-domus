@@ -36,7 +36,7 @@ type Suivi = Awaited<ReturnType<typeof chargerSuivi>>;
 const entretien = (p: Partial<Suivi["entretiens"][number]>): Suivi["entretiens"][number] => ({
   id: crypto.randomUUID(),
   titre: "Entretien",
-  nature: "tache",
+  avecRdv: false,
   echeance: "2026-12-01",
   delaiAlerteJours: 7,
   etat: "a_faire",
@@ -57,9 +57,9 @@ describe("calcul des rappels", () => {
   // Mardi 3 novembre 2026 ; lundi 2 novembre.
   const suivi: Suivi = {
     entretiens: [
-      entretien({ titre: "Vidange", nature: "rdv", echeance: "2026-12-15", delaiAlerteJours: 42 }), // fenêtre ouverte le 3 nov.
+      entretien({ titre: "Vidange", avecRdv: true, echeance: "2026-12-15", delaiAlerteJours: 42 }), // fenêtre ouverte le 3 nov.
       entretien({ titre: "Filtre", echeance: "2026-11-02" }), // en retard depuis le 3 nov.
-      entretien({ titre: "Chaudière", nature: "rdv", etat: "rdv_pris", dateRdv: "2026-11-04", echeance: "2026-11-01", prestataireNom: "Martin", prestataireTelephone: "06 12" }),
+      entretien({ titre: "Chaudière", avecRdv: true, etat: "rdv_pris", dateRdv: "2026-11-04", echeance: "2026-11-01", prestataireNom: "Martin", prestataireTelephone: "06 12" }),
       entretien({ titre: "Ramonage", echeance: "2027-03-01" }),
     ],
     garanties: [{ id: "g", nom: "Lave-linge", maisonNom: "Maison", finGarantie: "2026-12-03" }],
@@ -115,7 +115,7 @@ describe("préférences et agenda", () => {
 
     const maison = await ok("creerMaison", { nom: "Maison" });
     const el = await ok("creerElement", { maisonId: maison, nom: "Fosse septique", finGarantie: ajouter(aujourdhui(), 3, "mois") });
-    await ok("creerEntretien", { elementId: el, titre: "Vidange, avec bordereau", nature: "rdv", intervalleValeur: 4, intervalleUnite: "an", echeance: ajouter(aujourdhui(), 2, "mois") });
+    await ok("creerEntretien", { elementId: el, titre: "Vidange, avec bordereau", avecRdv: true, intervalleValeur: 4, intervalleUnite: "an", echeance: ajouter(aujourdhui(), 2, "mois") });
 
     const chemin = etat.corps.ical.chemin as string;
     const r = await s.app.handle(new Request(`http://local${chemin}`));
@@ -181,7 +181,7 @@ describe("envoi des e-mails", () => {
   test("tournée : chacun selon ses canaux ; notée pour ne pas repartir", async () => {
     const maison = await ok("creerMaison", { nom: "Location" });
     const el = await ok("creerElement", { maisonId: maison, nom: "Chaudière" });
-    const e = await ok("creerEntretien", { elementId: el, titre: "Entretien annuel", nature: "rdv", intervalleValeur: 1, intervalleUnite: "an", echeance: aujourdhui() });
+    const e = await ok("creerEntretien", { elementId: el, titre: "Entretien annuel", avecRdv: true, intervalleValeur: 1, intervalleUnite: "an", echeance: aujourdhui() });
     await ok("prendreRdv", e, { dateRdv: ajouter(aujourdhui(), 1, "jour") });
     // Le compte « autre » ne veut pas d'e-mails.
     const autre = await s.connexion("autre@famille.fr", "mot-de-passe-solide");

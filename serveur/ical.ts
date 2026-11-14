@@ -74,7 +74,7 @@ export async function genererIcal(maintenant = new Date(), { famille = false } =
       });
       continue;
     }
-    if (e.nature === "rdv" && e.etat !== "rdv_pris" && e.delaiAlerteJours > 0)
+    if (e.avecRdv && e.etat !== "rdv_pris" && e.delaiAlerteJours > 0)
       evenements.push({
         uid: `prendre-${e.id}`,
         jour: ajouter(e.echeance, -e.delaiAlerteJours, "jour"),
@@ -84,7 +84,7 @@ export async function genererIcal(maintenant = new Date(), { famille = false } =
     evenements.push({
       uid: `echeance-${e.id}`,
       jour: e.echeance,
-      resume: quoi(e.nature === "rdv" ? "Échéance" : "À faire"),
+      resume: quoi(e.avecRdv ? "Échéance" : "À faire"),
       description: `${ou}${e.notes ? `\n${e.notes}` : ""}${contact}`,
     });
   }

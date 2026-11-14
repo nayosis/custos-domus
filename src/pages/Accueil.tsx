@@ -10,10 +10,10 @@ import { listeMaisons } from "../data/maisons";
 import { tableauDeBord } from "../data/tableauDeBord";
 import { AvisMiseAJour } from "../components/MiseAJour";
 import { BadgeGarantie } from "../components/BadgeGarantie";
-import { BadgeSituation, faireRoutine, IconeNature, ModalEcheance, ModalRdv, type LigneEntretien } from "../components/Entretiens";
+import { BadgeSituation, faireEnUnGeste, IconeChose, ModalEcheance, ModalRdv, type LigneEntretien } from "../components/Entretiens";
 import { ModalRealisation } from "../components/ModalRealisation";
 import { dateLisible, duree, euros } from "../lib/dates";
-import { situation, type Situation } from "../lib/entretiens";
+import { estFrequente, faitEnUnGeste, situation, type Situation } from "../lib/entretiens";
 import { useEcran } from "../lib/ecran";
 import { accueilRoute } from "../router";
 
@@ -30,11 +30,11 @@ function aujourdhuiLong() {
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
-/** « 2 rendez-vous à prendre, 1 tâche » : ce qu'il y a à prévoir, par nature. */
-function detailAPrevoir(liste: { nature: string }[]) {
-  const rdv = liste.filter((e) => e.nature === "rdv").length;
-  const taches = liste.length - rdv;
-  return [rdv && `${rdv} rendez-vous à prendre`, taches && `${taches} tâche${taches > 1 ? "s" : ""}`].filter(Boolean).join(", ");
+/** « 2 rendez-vous à prendre, 1 à faire » : ce qu'il y a à prévoir. */
+function detailAPrevoir(liste: { avecRdv: boolean; etat: string }[]) {
+  const rdv = liste.filter((e) => e.avecRdv && e.etat !== "rdv_pris").length;
+  const autres = liste.length - rdv;
+  return [rdv && `${rdv} rendez-vous à prendre`, autres && `${autres} à faire`].filter(Boolean).join(", ");
 }
 
 /** Chiffre clé : libellé, valeur, précision ; la couleur n'est portée que par l'icône (avec son libellé). */
@@ -104,10 +104,10 @@ function Ou({
 function LigneAFaire({
   e, avecMaison, onRdv, onFait, onEcheance,
 }: { e: Classe; avecMaison: boolean; onRdv: () => void; onFait: () => void; onEcheance: (mode: "passer" | "reporter") => void }) {
-  const aPrendre = e.nature === "rdv";
+  const aPrendre = e.avecRdv && e.etat !== "rdv_pris";
   return (
     <Group gap="sm" wrap="nowrap" py="xs" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
-      <IconeNature nature={e.nature} />
+      <IconeChose e={e} />
       <Box style={{ flex: 1, minWidth: 0 }}>
         <Group gap="xs">
           <Text fw={600} size="sm">
@@ -206,8 +206,8 @@ export function Accueil() {
   const enRetard = classes.filter((e) => e.s.etat === "en_retard");
   const aPrevoir = classes.filter((e) => e.s.etat === "a_prevoir");
   const rendezVous = classes.filter((e) => e.s.etat === "rdv_pris").sort((a, b) => (a.dateRdv ?? "9999").localeCompare(b.dateRdv ?? "9999"));
-  // Les routines reviennent sans cesse : elles n'apparaissent que le moment venu.
-  const prochainement = classes.filter((e) => e.s.etat === "a_venir" && e.s.jours <= PROCHAINEMENT_JOURS && e.nature !== "routine");
+  // Ce qui revient chaque jour ou chaque semaine n'apparaît que le moment venu.
+  const prochainement = classes.filter((e) => e.s.etat === "a_venir" && e.s.jours <= PROCHAINEMENT_JOURS && !estFrequente(e));
   const aFaire = [...enRetard, ...aPrevoir];
   const prochainRdv = rendezVous.find((e) => e.dateRdv);
   const { depenses } = data;
@@ -261,7 +261,7 @@ export function Accueil() {
                       e={e}
                       avecMaison={avecMaison}
                       onRdv={() => setRdv(e)}
-                      onFait={() => (e.nature === "routine" ? faireRoutine(e) : setFait(e))}
+                      onFait={() => (faitEnUnGeste(e) ? faireEnUnGeste(e) : setFait(e))}
                       onEcheance={(mode) => setEcheance({ e: e as LigneEntretien, mode })}
                     />
                   ))}

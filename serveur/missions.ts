@@ -34,7 +34,8 @@ export async function definirMission(entretienId: string, m: SaisieMission) {
   const connus = await db.select({ id: enfant.id }).from(enfant).where(inArray(enfant.id, enfants));
   if (connus.length !== enfants.length) throw new ErreurMetier("Enfant inconnu.");
   await db.insert(missionTour).values(enfants.map((enfantId, ordre) => ({ entretienId, enfantId, ordre })));
-  await db.update(entretien).set({ points: pts, enfantId: titulaire(enfants) }).where(eq(entretien.id, entretienId));
+  // Qui s'en charge : un seul choix ; confiée aux enfants, plus de prestataire.
+  await db.update(entretien).set({ points: pts, enfantId: titulaire(enfants), prestataireId: null }).where(eq(entretien.id, entretienId));
 }
 
 /** Est-ce une mission de cet enfant (la sienne, ou partagée avec lui) ? */

@@ -97,7 +97,7 @@ export async function remplacerElement(id: string, nouveau: Saisie & { nom: stri
         id: newId(),
         elementId: nouvelId,
         titre: e.titre,
-        nature: e.nature,
+        avecRdv: e.avecRdv,
         intervalleValeur: e.intervalleValeur,
         intervalleUnite: e.intervalleUnite,
         ancrage: e.ancrage,

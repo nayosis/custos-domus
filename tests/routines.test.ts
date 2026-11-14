@@ -26,13 +26,12 @@ describe("choses à faire sur la maison", () => {
     expect(await refuse("creerRealisation", { titre: "Rien", date: jour })).toBe(400);
   });
 
-  test("routine : « Fait » en un geste (date du jour, ni coût ni prestataire), historique de la maison", async () => {
+  test("routine de la maison : « Fait » à la date du jour, à date fixe, historique de la maison", async () => {
     const maison = await ok("creerMaison", { nom: "Maison des routines" });
     const presta = await ok("creerPrestataire", { nom: "Voisin" });
     const id = await ok("creerEntretien", {
       maisonId: maison,
       titre: "Sortir la poubelle jaune",
-      nature: "routine",
       intervalleValeur: 2,
       intervalleUnite: "semaine",
       ancrage: "fixe",
@@ -40,13 +39,14 @@ describe("choses à faire sur la maison", () => {
       prestataireId: presta,
     });
     const avant = await ok("aFaireMaison", maison);
-    expect(avant.entretiens[0]).toMatchObject({ id, nature: "routine", delaiAlerteJours: 0, prestataireId: null, elementId: null, maisonId: maison });
+    // Une routine peut avoir un prestataire (le voisin qui la sort pendant les vacances).
+    expect(avant.entretiens[0]).toMatchObject({ id, delaiAlerteJours: 0, prestataireId: presta, avecRdv: false, elementId: null, maisonId: maison });
 
     await ok("realiserEntretien", id, { cout: 12 });
     const apres = await ok("aFaireMaison", maison);
     expect(apres.entretiens[0].echeance).toBe(ajouter(jour, 2, "semaine"));
     expect(apres.historique).toHaveLength(1);
-    expect(apres.historique[0]).toMatchObject({ date: jour, cout: null, prestataireId: null, maisonId: maison, elementId: null });
+    expect(apres.historique[0]).toMatchObject({ date: jour, cout: 12, prestataireId: presta, maisonId: maison, elementId: null });
 
     // Une réparation sur la maison elle-même (toiture…).
     await ok("creerRealisation", { maisonId: maison, titre: "Gouttière recollée", date: jour, cout: 40 });
@@ -57,7 +57,7 @@ describe("choses à faire sur la maison", () => {
     const maison = await ok("creerMaison", { nom: "Maison avec éléments" });
     const el = await ok("creerElement", { maisonId: maison, nom: "Chaudière" });
     const vieux = await ok("creerElement", { maisonId: maison, nom: "Ancien ballon" });
-    await ok("creerEntretien", { elementId: el, titre: "Entretien chaudière", nature: "rdv", intervalleValeur: 1, intervalleUnite: "an", echeance: jour });
+    await ok("creerEntretien", { elementId: el, titre: "Entretien chaudière", avecRdv: true, intervalleValeur: 1, intervalleUnite: "an", echeance: jour });
     const suspendu = await ok("creerEntretien", { elementId: el, titre: "Purge", echeance: jour });
     await ok("majEntretien", suspendu, { actif: false });
     await ok("creerEntretien", { elementId: vieux, titre: "Détartrage", echeance: jour });
@@ -68,7 +68,7 @@ describe("choses à faire sur la maison", () => {
 
   test("tableau de bord, rappels et agenda voient les choses à faire de la maison", async () => {
     const maison = await ok("creerMaison", { nom: "Maison suivie" });
-    const id = await ok("creerEntretien", { maisonId: maison, titre: "Sortir la poubelle verte", nature: "routine", intervalleValeur: 1, intervalleUnite: "semaine", echeance: jour });
+    const id = await ok("creerEntretien", { maisonId: maison, titre: "Sortir la poubelle verte", intervalleValeur: 1, intervalleUnite: "semaine", echeance: jour });
     await ok("creerRealisation", { maisonId: maison, titre: "Ramonage du conduit", date: jour, cout: 80 });
 
     const tdb = await ok("tableauDeBord", maison);
@@ -91,7 +91,7 @@ describe("choses à faire sur la maison", () => {
 
   test("supprimer la maison emporte ses choses à faire, son historique et leurs fichiers", async () => {
     const maison = await ok("creerMaison", { nom: "Maison à supprimer" });
-    const id = await ok("creerEntretien", { maisonId: maison, titre: "Tondre", nature: "routine", intervalleValeur: 1, intervalleUnite: "semaine", echeance: jour });
+    const id = await ok("creerEntretien", { maisonId: maison, titre: "Tondre", intervalleValeur: 1, intervalleUnite: "semaine", echeance: jour });
     await ok("realiserEntretien", id);
     await ok("supprimerMaison", maison);
     expect(await refuse("aFaireMaison", maison)).toBe(404);

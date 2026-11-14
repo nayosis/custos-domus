@@ -17,8 +17,13 @@ Modèle d'entretien ── bibliothèque appliquée en un clic à un élément
 - **Élément** : un seul modèle pour les équipements (fosse septique, PAC) et les achats (électroménager, PC).
   Emplacement en texte libre (pas de pièces). Date de mise en service distincte de la date d'achat (garantie).
   Remplacer un équipement : l'ancien est archivé avec son historique (`remplace_par`), le nouveau repart de zéro.
-- **Entretien** : nature `tache` (à faire soi-même) ou `rdv` (à prendre). Intervalle en jours, mois ou années ;
-  vide = ponctuel (clos une fois réalisé). Pas d'entretien saisonnier ni conditionnel en V1.
+- **Chose à faire** (table `entretien`) : trois réglages indépendants (migration 0007, qui remplace la « nature »).
+  - **Tâche ou routine** : sans intervalle, une tâche (close une fois faite) ; avec un intervalle en jours, semaines,
+    mois ou années, une routine (elle revient).
+  - **Qui s'en charge** : nous, un prestataire (`prestataire_id`) ou les enfants (`points`, mission) ; l'un ou l'autre,
+    déduit des colonnes (`quiDe`). Confier aux enfants retire le prestataire ; choisir un prestataire retire la mission.
+  - **Prendre rendez-vous d'abord** (`avec_rdv`) : étape « rendez-vous pris » en plus. Cochée d'office quand on choisit
+    un prestataire, possible sans (contrôle technique).
 - **Réalisation** : note libre, coût, prestataire, plusieurs documents. Sans entretien = intervention ponctuelle
   consignée après coup (réparation).
 
@@ -28,8 +33,12 @@ Modèle d'entretien ── bibliothèque appliquée en un clic à un élément
   - ancrage `realisation` (par défaut) : date réelle + intervalle ;
   - ancrage `fixe` : échéance précédente + intervalle.
 - **Création** : on peut saisir une « dernière réalisation » pour que la première échéance soit juste.
-- **Fenêtre d'alerte** : s'ouvre à échéance − délai. Délais par défaut : rendez-vous 6 semaines, tâche 1 semaine ;
-  modifiables par entretien.
+- **Fenêtre d'alerte** : s'ouvre à échéance − délai. Délais par défaut : avec rendez-vous 6 semaines ; ce qui revient
+  chaque jour ou chaque semaine, le jour même ; sinon 1 semaine. Modifiables par chose à faire.
+- **Ancrage par défaut** : `fixe` pour ce qui revient chaque jour ou semaine (la poubelle du mercredi), sinon
+  `realisation`.
+- **« Fait »** : en un geste (date du jour) quand c'est nous ou les enfants sans rendez-vous ; sinon le formulaire
+  (date, coût, prestataire, facture).
 - **Flux d'un rendez-vous** : à prendre → rdv pris (date, prestataire) → fait. Rappel la veille du rendez-vous.
 - **Relance** chaque semaine tant qu'un entretien de la fenêtre n'est ni fait ni « rdv pris ».
 - **Garanties** : alerte un mois avant la fin.
@@ -98,6 +107,6 @@ les voitures, et les enfants à qui confier des choses. Décisions prises (novem
    comme avant si rien n'a été fait depuis. Un parent qui coche « Fait » ne donne de points à personne. Objectif de
    points par semaine (du lundi au dimanche) ; **récompenses** définies par les parents, demandées par l'enfant (points
    réservés), accordées ou refusées (les points reviennent). Page **Famille** (`/famille`, dans « Plus », pastille quand
-   quelque chose attend). Codes PIN masqués dans le journal. Page **Aide** (`/aide`, dans le menu) : tâche, rendez-vous et routine comparés. **Notifications** sur le téléphone de l'enfant (table `abonnement_push_enfant`
+   quelque chose attend). Codes PIN masqués dans le journal. Page **Aide** (`/aide`, dans le menu) : les trois réglages d'une chose à faire et ce qui en découle. **Notifications** sur le téléphone de l'enfant (table `abonnement_push_enfant`
    dans comptes.db) : ses missions du jour et en retard à la tournée de 8 h, mission validée ou refusée, récompense
    accordée ou refusée ; retirées quand il quitte l'appareil (« Quitter »), quand le profil est désactivé ou supprimé. Ton sobre, pas enfantin.

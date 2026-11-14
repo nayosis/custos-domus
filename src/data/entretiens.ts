@@ -2,7 +2,7 @@ import { asc, eq } from "drizzle-orm";
 import { db, newId } from "../db/client";
 import { element, entretien, modeleEntretien, realisation, type Entretien } from "../db/schema";
 import { aujourdhui, lireDate } from "../lib/dates";
-import { ajouter, DELAI_DEFAUT, echeanceApresPassage, estNature, estRecurrent, estUnite, lireHeure, prochaineEcheance, type Nature, type Unite } from "../lib/entretiens";
+import { ajouter, delaiDefaut, echeanceApresPassage, estRecurrent, estUnite, lireHeure, prochaineEcheance, type Unite } from "../lib/entretiens";
 import { ErreurMetier } from "../../serveur/erreurs";
 import { ajouterReleve, dernierKm, recalculerKm } from "../../serveur/kilometrage";
 import { verifierVersion, versionDe } from "./version";
@@ -11,7 +11,7 @@ import { definirMission, type SaisieMission } from "../../serveur/missions";
 type Saisie = Partial<
   Pick<
     Entretien,
-    "titre" | "nature" | "intervalleValeur" | "intervalleUnite" | "ancrage" | "echeance" | "delaiAlerteJours" | "prestataireId" | "notes" | "actif" | "intervalleKm" | "kmEcheance"
+    "titre" | "avecRdv" | "intervalleValeur" | "intervalleUnite" | "ancrage" | "echeance" | "delaiAlerteJours" | "prestataireId" | "notes" | "actif" | "intervalleKm" | "kmEcheance"
   >
 >;
 
@@ -28,10 +28,7 @@ function nettoyer(v: Saisie) {
     r.titre = (v.titre ?? "").trim();
     if (!r.titre) throw new ErreurMetier("Le titre est obligatoire.");
   }
-  if (v.nature !== undefined) {
-    if (!estNature(v.nature)) throw new ErreurMetier("Nature inconnue : tâche, rendez-vous ou routine.");
-    r.nature = v.nature;
-  }
+  if (v.avecRdv !== undefined) r.avecRdv = !!v.avecRdv;
   if (v.intervalleValeur !== undefined || v.intervalleUnite !== undefined) {
     const valeur = v.intervalleValeur;
     const recurrent = valeur != null && estUnite(v.intervalleUnite);
@@ -57,6 +54,8 @@ function nettoyer(v: Saisie) {
   return r;
 }
 
+const UN_SEUL_QUI = "Un prestataire ou les enfants : l'un ou l'autre.";
+
 /** Bibliothèque d'entretiens types, par catégorie. */
 export const listeModeles = () => db.select().from(modeleEntretien).orderBy(asc(modeleEntretien.categorie), asc(modeleEntretien.titre));
 
@@ -70,7 +69,7 @@ export function rattachement(v: { elementId?: string | null; maisonId?: string |
 /**
  * Nouvelle chose à faire. Première échéance : celle donnée, sinon la « dernière réalisation » + intervalle
  * (la réalisation est alors consignée dans l'historique), sinon aujourd'hui.
- * Une routine n'a pas de prestataire.
+ * Qui s'en charge : un seul choix ; confiée aux enfants, elle n'a pas de prestataire.
  */
 const estVehicule = async (elementId: string | null) =>
   !!elementId && (await db.select({ type: element.type }).from(element).where(eq(element.id, elementId)))[0]?.type === "vehicule";
@@ -85,9 +84,8 @@ export async function creerEntretien(
     },
 ) {
   const ou = rattachement(v);
-  const valeurs = nettoyer({ nature: "tache", ...v });
-  const nature = valeurs.nature as Nature;
-  if (nature === "routine") valeurs.prestataireId = null;
+  const valeurs = nettoyer(v);
+  if (v.mission?.enfants.length && valeurs.prestataireId) throw new ErreurMetier(UN_SEUL_QUI);
   const auKm = !!valeurs.intervalleKm;
   if (auKm && !(await estVehicule(ou.elementId))) throw new ErreurMetier("Un intervalle en kilomètres ne vaut que pour un véhicule.");
   if (v.kmDerniere != null && (!Number.isInteger(v.kmDerniere) || v.kmDerniere < 0)) throw new ErreurMetier("Kilométrage invalide.");
@@ -104,9 +102,9 @@ export async function creerEntretien(
     id,
     ...ou,
     titre: valeurs.titre!,
-    nature,
+    avecRdv: valeurs.avecRdv ?? false,
     echeance: echeance ?? aujourdhui(),
-    delaiAlerteJours: valeurs.delaiAlerteJours ?? DELAI_DEFAUT[nature],
+    delaiAlerteJours: valeurs.delaiAlerteJours ?? delaiDefaut(valeurs),
     etat: "a_faire",
     actif: true,
   });
@@ -123,7 +121,10 @@ export async function creerEntretien(
 export async function majEntretien(id: string, patch: Saisie & { mission?: SaisieMission }, version?: string | null) {
   await verifierVersion("entretien", id, version);
   const valeurs = nettoyer(patch);
+  if (patch.mission?.enfants.length && valeurs.prestataireId) throw new ErreurMetier(UN_SEUL_QUI);
+  // Un prestataire choisi : ce n'est plus une mission des enfants.
   if (patch.mission !== undefined) await definirMission(id, patch.mission);
+  else if (valeurs.prestataireId) await definirMission(id, null);
   // Échéance changée à la main : c'est la nouvelle référence du rythme, un report en cours est oublié.
   const [avant] = valeurs.echeance ? await db.select({ echeance: entretien.echeance }).from(entretien).where(eq(entretien.id, id)) : [];
   if (Object.keys(valeurs).length)
@@ -177,6 +178,7 @@ export async function prendreRdv(
       ...(v.prestataireId !== undefined ? { prestataireId: v.prestataireId || null } : {}),
     })
     .where(eq(entretien.id, id));
+  if (v.prestataireId) await definirMission(id, null);
 }
 
 /** Rendez-vous annulé : l'entretien redevient à prendre. */
@@ -230,7 +232,7 @@ export async function reporterEcheance(id: string, v: { date: string }) {
 
 /**
  * C'est fait : consigné dans l'historique, puis échéance suivante (récurrent) ou clôture (ponctuel).
- * Date du jour par défaut (routine : « Fait » en un geste ; ni coût ni prestataire).
+ * Date du jour par défaut (« Fait » en un geste : rien d'autre à saisir).
  * Renvoie l'identifiant de la réalisation (pour y joindre des documents).
  */
 export async function realiserEntretien(
@@ -244,9 +246,8 @@ export async function realiserEntretien(
     if (!e.elementId) throw new ErreurMetier("Kilométrage : seulement pour un véhicule.");
     await ajouterReleve(e.elementId, jour, v.km);
   }
-  const routine = e.nature === "routine";
-  if (!routine && v.cout != null && (!Number.isFinite(v.cout) || v.cout < 0)) throw new ErreurMetier("Coût invalide.");
-  const prestataireId = routine ? null : v.prestataireId === undefined ? e.prestataireId : v.prestataireId || null;
+  if (v.cout != null && (!Number.isFinite(v.cout) || v.cout < 0)) throw new ErreurMetier("Coût invalide.");
+  const prestataireId = v.prestataireId === undefined ? e.prestataireId : v.prestataireId || null;
   const realisationId = newId();
   await db.insert(realisation).values({
     id: realisationId,
@@ -256,7 +257,7 @@ export async function realiserEntretien(
     date: jour,
     titre: e.titre,
     note: v.note?.trim() || null,
-    cout: routine ? null : (v.cout ?? null),
+    cout: v.cout ?? null,
     prestataireId,
     kilometrage: v.km ?? null,
   });

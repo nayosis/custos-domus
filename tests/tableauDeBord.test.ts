@@ -29,8 +29,8 @@ describe("tableau de bord", () => {
     await ok("majElement", vieux, { archive: true });
     const ailleurs = await ok("creerElement", { maisonId: vendue, nom: "Chaudière" });
 
-    const enRetard = await ok("creerEntretien", { elementId: fosse, titre: "Vidange", nature: "rdv", intervalleValeur: 4, intervalleUnite: "an", echeance: ajouter(jour, -10, "jour") });
-    await ok("creerEntretien", { elementId: pac, titre: "Entretien PAC", nature: "rdv", intervalleValeur: 2, intervalleUnite: "an", echeance: ajouter(jour, 2, "an") });
+    const enRetard = await ok("creerEntretien", { elementId: fosse, titre: "Vidange", avecRdv: true, intervalleValeur: 4, intervalleUnite: "an", echeance: ajouter(jour, -10, "jour") });
+    await ok("creerEntretien", { elementId: pac, titre: "Entretien PAC", avecRdv: true, intervalleValeur: 2, intervalleUnite: "an", echeance: ajouter(jour, 2, "an") });
     await ok("creerEntretien", { elementId: vieux, titre: "Nettoyage four", echeance: jour });
     await ok("creerEntretien", { elementId: ailleurs, titre: "Entretien chaudière", echeance: jour });
 

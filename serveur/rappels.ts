@@ -25,7 +25,7 @@ export async function chargerSuivi() {
       .select({
         id: entretien.id,
         titre: entretien.titre,
-        nature: entretien.nature,
+        avecRdv: entretien.avecRdv,
         echeance: entretien.echeance,
         delaiAlerteJours: entretien.delaiAlerteJours,
         etat: entretien.etat,
@@ -125,7 +125,7 @@ export async function calculerRappels(jour: string, derniere: string | null, opt
 
 const ou = (e: { elementNom: string | null; maisonNom: string | null }) => lieu(e);
 const aLHeure = (e: LigneEntretien) => (e.heureRdv ? ` à ${libelleHeure(e.heureRdv)}` : "");
-const action = (e: LigneEntretien) => (e.nature === "rdv" ? "rendez-vous à prendre" : "à faire");
+const action = (e: LigneEntretien) => (e.avecRdv ? "rendez-vous à prendre" : "à faire");
 
 function phrase(a: Alerte, jour: string) {
   switch (a.type) {
@@ -136,7 +136,7 @@ function phrase(a: Alerte, jour: string) {
     case "en_retard":
       return `En retard : ${a.e.titre} — ${ou(a.e)} (échéance du ${dateLisible(a.e.echeance)})`;
     case "a_prevoir":
-      return `${a.e.nature === "rdv" ? "Rendez-vous à prendre" : "À faire"} : ${a.e.titre} — ${ou(a.e)}, avant le ${dateLisible(a.e.echeance)}`;
+      return `${a.e.avecRdv ? "Rendez-vous à prendre" : "À faire"} : ${a.e.titre} — ${ou(a.e)}, avant le ${dateLisible(a.e.echeance)}`;
     case "garantie":
       return `Garantie : ${a.g.nom}${a.g.maisonNom ? ` (${a.g.maisonNom})` : ""} n'est plus garanti après le ${dateLisible(a.g.finGarantie)}${a.g.finGarantie < jour ? "" : ", dans un mois"}`;
     case "releve":

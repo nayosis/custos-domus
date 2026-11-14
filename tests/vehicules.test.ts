@@ -68,7 +68,7 @@ describe("véhicules", () => {
     const id = await ok("creerEntretien", {
       elementId: v,
       titre: "Vidange",
-      nature: "rdv",
+      avecRdv: true,
       intervalleValeur: 1,
       intervalleUnite: "an",
       intervalleKm: 15000,
@@ -122,7 +122,7 @@ describe("véhicules", () => {
 
   test("tableau de bord : les véhicules apparaissent quand on regarde toutes les maisons", async () => {
     const v = await ok("creerVehicule", { nom: "Utilitaire", km: 1000 });
-    const id = await ok("creerEntretien", { elementId: v, titre: "Contrôle technique", nature: "rdv", intervalleValeur: 2, intervalleUnite: "an", echeance: jour });
+    const id = await ok("creerEntretien", { elementId: v, titre: "Contrôle technique", avecRdv: true, intervalleValeur: 2, intervalleUnite: "an", echeance: jour });
     await ok("creerRealisation", { elementId: v, titre: "Batterie changée", date: jour, cout: 110, kilometrage: 1200 });
     const tout = await ok("tableauDeBord");
     expect(tout.entretiens.find((e: { id: string }) => e.id === id)).toMatchObject({ elementNom: "Utilitaire", maisonNom: null });

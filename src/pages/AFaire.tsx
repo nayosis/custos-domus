@@ -3,10 +3,10 @@ import { IconBox } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { aFaireMaison, listeMaisons } from "../data/maisons";
-import { BadgeSituation, Entretiens, IconeNature } from "../components/Entretiens";
+import { BadgeSituation, Entretiens, IconeChose } from "../components/Entretiens";
 import { Historique } from "../components/Historique";
 import { aujourdhui } from "../lib/dates";
-import { NATURES, situation, type Nature } from "../lib/entretiens";
+import { genre, situation } from "../lib/entretiens";
 import { aFaireRoute } from "../router";
 
 /** Ce qui est à faire sur les éléments de la maison : en lecture, chaque ligne mène à la fiche de l'élément. */
@@ -26,7 +26,7 @@ function SurLesElements({ lignes }: { lignes: Awaited<ReturnType<typeof aFaireMa
         <Stack gap={0}>
           {lignes.map((e) => (
             <Group key={e.id} gap="sm" wrap="nowrap" py="xs" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
-              <IconeNature nature={e.nature} />
+              <IconeChose e={e} />
               <Box style={{ flex: 1, minWidth: 0 }}>
                 <Group gap="xs">
                   <Text fw={600} size="sm">
@@ -35,7 +35,7 @@ function SurLesElements({ lignes }: { lignes: Awaited<ReturnType<typeof aFaireMa
                   <BadgeSituation e={e} s={situation(e, jour)} />
                 </Group>
                 <Text size="xs" c="dimmed" truncate>
-                  {NATURES[e.nature as Nature]} ·{" "}
+                  {genre(e)}{e.avecRdv ? " sur rendez-vous" : ""} ·{" "}
                   <Anchor size="xs" renderRoot={(p) => <Link {...p} to="/elements/$id" params={{ id: e.elementId! }} />}>
                     {e.elementNom}
                   </Anchor>

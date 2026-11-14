@@ -59,29 +59,31 @@ describe("entretiens", () => {
   test("bibliothèque de modèles installée par migration", async () => {
     const modeles = await ok("listeModeles");
     expect(modeles.length).toBeGreaterThan(15);
-    expect(modeles.find((m: { id: string }) => m.id === "modele-fosse-septique")).toMatchObject({ nature: "rdv", intervalleValeur: 4, intervalleUnite: "an", delaiAlerteJours: 42 });
+    expect(modeles.find((m: { id: string }) => m.id === "modele-fosse-septique")).toMatchObject({ avecRdv: true, intervalleValeur: 4, intervalleUnite: "an", delaiAlerteJours: 42 });
   });
 
   test("création avec dernière réalisation : échéance calculée, réalisation consignée, délai par défaut", async () => {
     const el = await nouvelElement("Fosse septique");
-    const id = await ok("creerEntretien", { elementId: el, titre: "Vidange", nature: "rdv", intervalleValeur: 4, intervalleUnite: "an", derniereRealisation: "2024-06-10" });
+    const id = await ok("creerEntretien", { elementId: el, titre: "Vidange", avecRdv: true, intervalleValeur: 4, intervalleUnite: "an", derniereRealisation: "2024-06-10" });
     const fiche = await ok("ficheElement", el);
     expect(fiche.entretiens[0]).toMatchObject({ id, echeance: "2028-06-10", delaiAlerteJours: 42, etat: "a_faire", actif: true });
     expect(fiche.historique).toHaveLength(1);
     expect(fiche.historique[0]).toMatchObject({ entretienId: id, date: "2024-06-10", titre: "Vidange" });
 
     const tache = await ok("creerEntretien", { elementId: el, titre: "Contrôle du niveau", intervalleValeur: 1, intervalleUnite: "an" });
-    expect(await entretienDe(el, tache)).toMatchObject({ nature: "tache", delaiAlerteJours: 7, echeance: aujourdhui() });
+    expect(await entretienDe(el, tache)).toMatchObject({ avecRdv: false, delaiAlerteJours: 7, echeance: aujourdhui(), ancrage: "realisation" });
+    // Ce qui revient chaque semaine : rappelé le jour même.
+    const hebdo = await ok("creerEntretien", { elementId: el, titre: "Regarder le niveau", intervalleValeur: 1, intervalleUnite: "semaine" });
+    expect(await entretienDe(el, hebdo)).toMatchObject({ delaiAlerteJours: 0 });
 
     expect((await s.rpc("creerEntretien", [{ elementId: el, titre: " " }], cookie)).status).toBe(400);
-    expect((await s.rpc("creerEntretien", [{ elementId: el, titre: "x", nature: "autre" }], cookie)).status).toBe(400);
     expect((await s.rpc("creerEntretien", [{ elementId: el, titre: "x", echeance: "32/01/2026" }], cookie)).status).toBe(400);
   });
 
   test("flux rendez-vous : à prendre → rdv pris → fait ; échéance suivante depuis la date réelle", async () => {
     const el = await nouvelElement();
     const presta = await ok("creerPrestataire", { nom: "Chauffage Martin" });
-    const id = await ok("creerEntretien", { elementId: el, titre: "Entretien PAC", nature: "rdv", intervalleValeur: 1, intervalleUnite: "an", echeance: "2026-11-01" });
+    const id = await ok("creerEntretien", { elementId: el, titre: "Entretien PAC", avecRdv: true, intervalleValeur: 1, intervalleUnite: "an", echeance: "2026-11-01" });
 
     await ok("prendreRdv", id, { dateRdv: "2026-11-18", prestataireId: presta });
     expect(await entretienDe(el, id)).toMatchObject({ etat: "rdv_pris", dateRdv: "2026-11-18", prestataireNom: "Chauffage Martin" });
@@ -102,7 +104,7 @@ describe("entretiens", () => {
     await ok("realiserEntretien", ponctuel, { date: "2026-11-03" });
     expect(await entretienDe(el, ponctuel)).toMatchObject({ actif: false, echeance: "2026-11-05" });
 
-    const fixe = await ok("creerEntretien", { elementId: el, titre: "Ramonage", nature: "rdv", intervalleValeur: 1, intervalleUnite: "an", ancrage: "fixe", echeance: "2026-10-01" });
+    const fixe = await ok("creerEntretien", { elementId: el, titre: "Ramonage", avecRdv: true, intervalleValeur: 1, intervalleUnite: "an", ancrage: "fixe", echeance: "2026-10-01" });
     await ok("realiserEntretien", fixe, { date: "2026-10-20" });
     expect((await entretienDe(el, fixe)).echeance).toBe("2027-10-01");
   });
@@ -147,7 +149,7 @@ describe("remplacement", () => {
   test("l'ancien est archivé avec son historique ; les entretiens repartent de la mise en service du nouveau", async () => {
     const maison = await ok("creerMaison", { nom: "Maison" });
     const ancien = await ok("creerElement", { maisonId: maison, nom: "Chaudière fioul", categorie: "Chauffage et climatisation", emplacement: "Cellier" });
-    const e = await ok("creerEntretien", { elementId: ancien, titre: "Entretien annuel", nature: "rdv", intervalleValeur: 1, intervalleUnite: "an", echeance: "2026-11-01" });
+    const e = await ok("creerEntretien", { elementId: ancien, titre: "Entretien annuel", avecRdv: true, intervalleValeur: 1, intervalleUnite: "an", echeance: "2026-11-01" });
     await ok("realiserEntretien", e, { date: "2025-11-01" });
 
     const nouveau = await ok("remplacerElement", ancien, { nom: "Pompe à chaleur", dateMiseEnService: "2026-10-15" }, true);

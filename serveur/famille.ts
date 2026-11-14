@@ -62,7 +62,7 @@ export async function espaceEnfant(enfantId: string) {
   if (!e) throw new ErreurMetier("Profil introuvable", 401);
   const [missions, faitesAujourdhui, historique, recompenses, demandes, compte] = await Promise.all([
     db
-      .select({ id: entretien.id, titre: entretien.titre, nature: entretien.nature, echeance: entretien.echeance, points: entretien.points, ou, notes: entretien.notes })
+      .select({ id: entretien.id, titre: entretien.titre, echeance: entretien.echeance, points: entretien.points, ou, notes: entretien.notes })
       .from(entretien)
       .leftJoin(element, eq(element.id, entretien.elementId))
       .leftJoin(maison, sql`${maison.id} = coalesce(${entretien.maisonId}, ${element.maisonId})`)

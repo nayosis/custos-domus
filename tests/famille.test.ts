@@ -45,7 +45,6 @@ async function mission(enfants: string[], options: { points?: number; echeance?:
   return ok("creerEntretien", {
     maisonId: maison,
     titre: options.titre ?? `Mission ${n}`,
-    nature: "routine",
     intervalleValeur: 1,
     intervalleUnite: "semaine",
     echeance: options.echeance ?? jour,
@@ -202,6 +201,26 @@ describe("missions", () => {
     await ok("supprimerEnfant", a);
     expect(await missionDe(id)).toMatchObject({ enfantId: b, enfants: [b] });
     expect(await missionDe(seul)).toBeUndefined();
+  });
+
+  test("qui s'en charge : un prestataire ou les enfants, l'un ou l'autre", async () => {
+    const a = await ok("creerEnfant", { prenom: "Kenzo", pin: "3333" });
+    const presta = await ok("creerPrestataire", { nom: "Paysagiste" });
+    const maison = await ok("creerMaison", { nom: `Maison ${++n}` });
+    const chose = async (id: string) => (await ok("aFaireMaison", maison)).entretiens.find((e: { id: string }) => e.id === id);
+    const base = { maisonId: maison, titre: "Tondre", intervalleValeur: 2, intervalleUnite: "semaine", echeance: jour };
+
+    expect(await refuse("creerEntretien", { ...base, prestataireId: presta, mission: { enfants: [a] } })).toBe(400);
+    // Prestataire, puis confiée aux enfants : le prestataire s'efface.
+    const id = await ok("creerEntretien", { ...base, prestataireId: presta });
+    let e = await chose(id);
+    await ok("majEntretien", id, { mission: { enfants: [a], points: 5 } }, e.modifieLe);
+    expect(await chose(id)).toMatchObject({ points: 5, prestataireId: null });
+    // Un prestataire choisi : ce n'est plus une mission.
+    e = await chose(id);
+    await ok("majEntretien", id, { prestataireId: presta }, e.modifieLe);
+    expect(await chose(id)).toMatchObject({ points: null, enfantId: null, prestataireId: presta });
+    expect(await missionDe(id)).toBeUndefined();
   });
 });
 
