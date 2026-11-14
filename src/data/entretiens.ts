@@ -1,12 +1,15 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, newId } from "../db/client";
-import { element, entretien, modeleEntretien, realisation, type Entretien } from "../db/schema";
-import { aujourdhui, lireDate } from "../lib/dates";
-import { ajouter, delaiDefaut, echeanceApresPassage, estRecurrent, estUnite, lireHeure, prochaineEcheance, type Unite } from "../lib/entretiens";
+import { element, enfant, entretien, modeleEntretien, realisation, type Entretien } from "../db/schema";
+import { aujourdhui, dateLisible, lireDate } from "../lib/dates";
+import { ajouter, delaiDefaut, MESSAGE_MAX, echeanceApresPassage, estRecurrent, estUnite, lireHeure, prochaineEcheance, type Unite } from "../lib/entretiens";
 import { ErreurMetier } from "../../serveur/erreurs";
 import { ajouterReleve, dernierKm, recalculerKm } from "../../serveur/kilometrage";
 import { verifierVersion, versionDe } from "./version";
 import { definirMission, type SaisieMission } from "../../serveur/missions";
+import { envoyerPush, type Notification } from "../../serveur/envoi";
+import { abonnementsDe, abonnementsEnfant, destinataires } from "../../serveur/reglages";
+import { utilisateurCourant } from "../../serveur/tracabilite";
 
 type Saisie = Partial<
   Pick<
@@ -277,4 +280,56 @@ export async function realiserEntretien(
     .set({ ...SANS_RDV, echeanceInitiale: null, ...(suivante ? { echeance: suivante } : { actif: false }) })
     .where(eq(entretien.id, id));
   return realisationId;
+}
+
+// --- Notifier à la demande
+
+/**
+ * Qui peut être prévenu d'une chose à faire : les enfants actifs et les autres parents, avec le nombre d'appareils
+ * où leurs notifications sont activées (un parent qui les a coupées dans ses préférences n'en a aucun).
+ */
+export async function destinatairesNotification() {
+  const enfants = await db.select({ id: enfant.id, prenom: enfant.prenom }).from(enfant).where(eq(enfant.actif, true)).orderBy(asc(enfant.prenom));
+  const moi = utilisateurCourant();
+  return {
+    enfants: enfants.map((e) => ({ ...e, appareils: abonnementsEnfant(e.id).length })),
+    parents: destinataires()
+      .filter((d) => d.adresse !== moi)
+      .map((d) => ({ id: d.id, nom: d.adresse.split("@")[0], appareils: d.push ? abonnementsDe(d.id).length : 0 })),
+  };
+}
+
+/**
+ * Notification envoyée tout de suite (« Rappel : nettoyer la chambre »), avec un message perso facultatif, sur les
+ * appareils des enfants et des parents choisis. Renvoie le nombre d'appareils joints et qui n'en a aucun.
+ */
+export async function notifierEntretien(id: string, v: { enfants?: string[]; parents?: string[]; message?: string | null }) {
+  const e = await charger(id);
+  const message = v.message?.trim() || null;
+  if (message && message.length > MESSAGE_MAX) throw new ErreurMetier(`Message trop long (${MESSAGE_MAX} caractères au plus).`);
+  const idsEnfants = [...new Set(v.enfants ?? [])];
+  const idsParents = [...new Set(v.parents ?? [])];
+  if (!idsEnfants.length && !idsParents.length) throw new ErreurMetier("Choisissez à qui envoyer la notification.");
+  const enfants = idsEnfants.length
+    ? await db.select({ id: enfant.id, prenom: enfant.prenom }).from(enfant).where(and(inArray(enfant.id, idsEnfants), eq(enfant.actif, true)))
+    : [];
+  if (enfants.length !== idsEnfants.length) throw new ErreurMetier("Enfant inconnu.");
+  const parents = destinataires().filter((d) => idsParents.includes(d.id));
+  if (parents.length !== idsParents.length) throw new ErreurMetier("Parent inconnu.");
+
+  const n: Omit<Notification, "url"> = {
+    titre: `Rappel : ${e.titre}`,
+    corps: message ?? `Pour le ${dateLisible(e.echeance)}`,
+    tag: `custos-rappel-${id}`,
+  };
+  let envoyees = 0;
+  const sansAppareil: string[] = [];
+  const envoyer = async (appareils: ReturnType<typeof abonnementsDe>, url: string, nom: string) => {
+    if (!appareils.length) return void sansAppareil.push(nom);
+    const r = await Promise.all(appareils.map((a) => envoyerPush(a, { ...n, url }).catch((err: unknown) => String(err))));
+    envoyees += r.filter((x) => x === "ok").length;
+  };
+  for (const x of enfants) await envoyer(abonnementsEnfant(x.id), "/enfant", x.prenom);
+  for (const p of parents) await envoyer(p.push ? abonnementsDe(p.id) : [], "/", p.adresse.split("@")[0]);
+  return { envoyees, sansAppareil };
 }

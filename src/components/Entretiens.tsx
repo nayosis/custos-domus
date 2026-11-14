@@ -1,23 +1,23 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
-  ActionIcon, Alert, Badge, Box, Button, Card, Checkbox, Collapse, Group, Menu, Modal, MultiSelect, NumberInput, Radio, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Textarea, Title, UnstyledButton,
+  ActionIcon, Alert, Badge, Box, Button, Card, Checkbox, Chip, Collapse, Group, Menu, Modal, MultiSelect, NumberInput, Radio, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Textarea, Title, UnstyledButton,
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { TimeInput } from "@mantine/dates";
 import {
   IconCalendarCheck, IconCalendarEvent, IconCalendarX, IconCheck, IconChevronDown, IconChevronRight, IconClockPause, IconDots, IconPlayerPause, IconPlayerPlay,
-  IconPlayerSkipForward, IconPencil, IconPlus, IconListCheck, IconReceipt, IconRotateClockwise, IconTool, IconTrash,
+  IconPlayerSkipForward, IconPencil, IconPlus, IconListCheck, IconReceipt, IconBellRinging, IconRotateClockwise, IconTool, IconTrash,
   IconUser,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  annulerRdv, creerEntretien, listeModeles, majEntretien, passerEcheance, prendreRdv, realiserEntretien, reporterEcheance, supprimerEntretien, type Rattachement,
+  annulerRdv, creerEntretien, destinatairesNotification, listeModeles, notifierEntretien, majEntretien, passerEcheance, prendreRdv, realiserEntretien, reporterEcheance, supprimerEntretien, type Rattachement,
 } from "../data/entretiens";
 import type { Entretien, ModeleEntretien } from "../db/schema";
 import { aujourdhui, dateLisible, duree } from "../lib/dates";
 import {
-  ajouter, delaiDefaut, DUREES_RDV, QUI, quiDe, echeanceApresPassage, estFrequente, estRecurrent, faitEnUnGeste, genre, libelleDelai, libelleDuree, libelleHeure, libelleIntervalle, situation,
+  ajouter, delaiDefaut, DUREES_RDV, MESSAGE_MAX, QUI, quiDe, echeanceApresPassage, estFrequente, estRecurrent, faitEnUnGeste, genre, libelleDelai, libelleDuree, libelleHeure, libelleIntervalle, situation,
   type Qui, type Situation, type Unite,
 } from "../lib/entretiens";
 import { ecrire } from "../lib/query";
@@ -473,6 +473,112 @@ function ModalEntretien({
   );
 }
 
+/**
+ * Notifier tout de suite : « Rappel : <titre> » et un message perso facultatif, aux enfants et aux parents choisis
+ * (pour une mission, ses enfants d'office). Qui n'a activé les notifications sur aucun appareil est signalé.
+ */
+export function ModalNotifier({ entretien, onClose }: { entretien: LigneEntretien | null; onClose: () => void }) {
+  const opened = !!entretien;
+  const { data: qui } = useQuery({ queryKey: ["destinataires-notification"], queryFn: () => destinatairesNotification(), enabled: opened });
+  const estMission = !!entretien && entretien.points != null;
+  const { data: tour } = useQuery({ queryKey: ["mission", entretien?.id], queryFn: () => enfantsMission(entretien!.id), enabled: opened && estMission });
+  const [enfants, setEnfants] = useState<string[] | null>(null);
+  const [parents, setParents] = useState<string[]>([]);
+  const [message, setMessage] = useState("");
+  const [cle, setCle] = useState<string | null>(null);
+  const [envoi, setEnvoi] = useState(false);
+  if ((entretien?.id ?? null) !== cle) {
+    setCle(entretien?.id ?? null);
+    setEnfants(estMission ? null : []);
+    setParents([]);
+    setMessage("");
+  }
+  // Mission : ses enfants cochés d'office, une fois connus.
+  if (enfants === null && tour) setEnfants(tour);
+  const choisis = enfants ?? [];
+  const aucun = !choisis.length && !parents.length;
+  const libelle = (nom: string, appareils: number) => (appareils ? nom : `${nom} (sans notifications)`);
+  const envoyer = async () => {
+    setEnvoi(true);
+    const r = await ecrire(() => notifierEntretien(entretien!.id, { enfants: choisis, parents, message }));
+    setEnvoi(false);
+    if (!r) return;
+    const sans = r.sansAppareil.length ? `Pas de notifications activées pour ${r.sansAppareil.join(", ")}.` : "";
+    notifications.show({
+      color: !r.envoyees ? "red" : sans ? "orange" : "green",
+      message: r.envoyees ? `Notification envoyée (${r.envoyees} appareil${r.envoyees > 1 ? "s" : ""}). ${sans}`.trim() : `Rien n'est parti. ${sans}`.trim(),
+    });
+    onClose();
+  };
+  return (
+    <Modal opened={opened} onClose={onClose} title={entretien ? `Notifier : ${entretien.titre}` : ""}>
+      <Stack>
+        {qui && qui.enfants.length > 0 && (
+          <div>
+            <Text size="sm" fw={500} mb={6}>
+              Enfants
+            </Text>
+            <Chip.Group multiple value={choisis} onChange={setEnfants}>
+              <Group gap="xs">
+                {qui.enfants.map((x) => (
+                  <Chip key={x.id} value={x.id} size="sm" color={x.appareils ? undefined : "gray"}>
+                    {libelle(x.prenom, x.appareils)}
+                  </Chip>
+                ))}
+              </Group>
+            </Chip.Group>
+          </div>
+        )}
+        {qui && qui.parents.length > 0 && (
+          <div>
+            <Text size="sm" fw={500} mb={6}>
+              Parents
+            </Text>
+            <Chip.Group multiple value={parents} onChange={setParents}>
+              <Group gap="xs">
+                {qui.parents.map((x) => (
+                  <Chip key={x.id} value={x.id} size="sm" color={x.appareils ? undefined : "gray"}>
+                    {libelle(x.nom, x.appareils)}
+                  </Chip>
+                ))}
+              </Group>
+            </Chip.Group>
+          </div>
+        )}
+        <Textarea
+          label="Message perso"
+          description="Facultatif ; sinon, la date prévue."
+          placeholder="Et que ça saute !"
+          autosize
+          minRows={2}
+          maxLength={MESSAGE_MAX}
+          value={message}
+          onChange={(x) => setMessage(x.currentTarget.value)}
+          data-autofocus
+        />
+        {entretien && (
+          <Card withBorder p="xs" bg="var(--mantine-color-default-hover)">
+            <Group gap="xs" wrap="nowrap" align="flex-start">
+              <IconBellRinging size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+              <div style={{ minWidth: 0 }}>
+                <Text size="sm" fw={600}>
+                  Rappel : {entretien.titre}
+                </Text>
+                <Text size="xs" c="dimmed" style={{ whiteSpace: "pre-line" }}>
+                  {message.trim() || `Pour le ${dateLisible(entretien.echeance)}`}
+                </Text>
+              </div>
+            </Group>
+          </Card>
+        )}
+        <Button leftSection={<IconBellRinging size={16} />} onClick={envoyer} loading={envoi} disabled={aucun}>
+          Envoyer
+        </Button>
+      </Stack>
+    </Modal>
+  );
+}
+
 /** Rendez-vous pris : date (facultative si pas encore fixée), heure et durée (facultatives), prestataire. */
 export function ModalRdv({ entretien, onClose }: { entretien: LigneEntretien | null; onClose: () => void }) {
   const [dateRdv, setDateRdv] = useState<string | null>(null);
@@ -573,10 +679,18 @@ export function ModalEcheance({ cible, onClose }: { cible: { e: LigneEntretien; 
   );
 }
 
-export type ActionsLigne = { onModifier: () => void; onRdv: () => void; onFait: () => void; onFaitDetails: () => void; onEcheance: (mode: "passer" | "reporter") => void };
+export type ActionsLigne = {
+  onModifier: () => void;
+  onRdv: () => void;
+  onFait: () => void;
+  onFaitDetails: () => void;
+  onEcheance: (mode: "passer" | "reporter") => void;
+  /** Envoyer tout de suite une notification (rappel, message perso). */
+  onNotifier: () => void;
+};
 
 /** Une chose à faire, avec ses actions ; `ou` : où elle se trouve (dans une liste qui mélange les éléments). */
-export function Ligne({ e, ou, onModifier, onRdv, onFait, onFaitDetails, onEcheance }: { e: LigneEntretien; ou?: ReactNode } & ActionsLigne) {
+export function Ligne({ e, ou, onModifier, onRdv, onFait, onFaitDetails, onEcheance, onNotifier }: { e: LigneEntretien; ou?: ReactNode } & ActionsLigne) {
   const s = situation(e, aujourdhui());
   const aPrendre = e.actif && e.avecRdv && e.etat !== "rdv_pris";
   // Bouton d'action seulement quand c'est d'actualité ; sinon, dans le menu.
@@ -650,6 +764,11 @@ export function Ligne({ e, ou, onModifier, onRdv, onFait, onFaitDetails, onEchea
               Fait, avec coût ou facture…
             </Menu.Item>
           )}
+          {e.actif && (
+            <Menu.Item leftSection={<IconBellRinging size={14} />} onClick={onNotifier}>
+              Notifier…
+            </Menu.Item>
+          )}
           {e.etat === "rdv_pris" && (
             <>
               <Menu.Item leftSection={<IconCalendarEvent size={14} />} onClick={onRdv}>
@@ -700,6 +819,7 @@ export function useActionsEntretiens(defaut: { categorie?: string | null; vehicu
   const [rdv, setRdv] = useState<LigneEntretien | null>(null);
   const [fait, setFait] = useState<LigneAvecLieu | null>(null);
   const [echeance, setEcheance] = useState<{ e: LigneEntretien; mode: "passer" | "reporter" } | null>(null);
+  const [notifier, setNotifier] = useState<LigneEntretien | null>(null);
   const vehicule = (e: LigneAvecLieu) => (e.elementType !== undefined ? e.elementType === "vehicule" : !!defaut.vehicule);
   const actions = (e: LigneAvecLieu): ActionsLigne => ({
     onModifier: () =>
@@ -713,6 +833,7 @@ export function useActionsEntretiens(defaut: { categorie?: string | null; vehicu
     onFait: () => (faitEnUnGeste(e) ? faireEnUnGeste(e) : setFait(e)),
     onFaitDetails: () => setFait(e),
     onEcheance: (mode) => setEcheance({ e, mode }),
+    onNotifier: () => setNotifier(e),
   });
   const ajouter = (ou: Rattachement, categorie = defaut.categorie ?? null, estVehicule = !!defaut.vehicule) =>
     setEdition({ entretien: null, ou, categorie, vehicule: estVehicule });
@@ -729,6 +850,7 @@ export function useActionsEntretiens(defaut: { categorie?: string | null; vehicu
       <ModalRdv entretien={rdv} onClose={() => setRdv(null)} />
       <ModalEcheance cible={echeance} onClose={() => setEcheance(null)} />
       <ModalRealisation cible={fait ? { mode: "entretien", entretien: fait } : null} vehicule={fait ? vehicule(fait) : false} onClose={() => setFait(null)} />
+      <ModalNotifier entretien={notifier} onClose={() => setNotifier(null)} />
     </>
   );
   return { actions, ajouter, modales };

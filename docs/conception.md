@@ -127,3 +127,7 @@ les voitures, et les enfants à qui confier des choses. Décisions prises (novem
    chose à sa date (le rendez-vous pris à son jour), les fois suivantes des routines en pointillés (`occurrences`,
    chacune supposée faite à sa date) ; plus en retard que le fil : rappelé au-dessus. Un jour trop chargé : « +N ».
    Chaque pastille ouvre ses actions.
+5. **Notifier à la demande** (fait) : « Notifier… » dans le menu d'une chose à faire (liste et chronologie). Notification
+   « Rappel : <titre> », avec un message perso facultatif (200 caractères ; sinon la date prévue), aux enfants et aux
+   autres parents choisis — les enfants d'une mission cochés d'office. Ceux qui n'ont activé les notifications sur
+   aucun appareil sont signalés, avant et après l'envoi. Journalisée (« Notification envoyée »).

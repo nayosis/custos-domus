@@ -18,6 +18,7 @@ const LIBELLES: Record<string, string> = {
   majEntretien: "Entretien modifié",
   supprimerEntretien: "Entretien supprimé",
   prendreRdv: "Rendez-vous pris",
+  notifierEntretien: "Notification envoyée",
   annulerRdv: "Rendez-vous annulé",
   passerEcheance: "Échéance passée",
   reporterEcheance: "Échéance reportée",

@@ -14,6 +14,7 @@ import {
 import { useElementSize } from "@mantine/hooks";
 import {
   IconAlertTriangle,
+  IconBellRinging,
   IconCalendarCheck,
   IconCheck,
   IconClockPause,
@@ -198,6 +199,12 @@ function Pastille({
               onClick={() => actions.onEcheance("passer")}
             >
               Passer cette fois…
+            </Menu.Item>
+            <Menu.Item
+              leftSection={<IconBellRinging size={14} />}
+              onClick={actions.onNotifier}
+            >
+              Notifier…
             </Menu.Item>
           </>
         )}

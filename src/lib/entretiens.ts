@@ -6,6 +6,9 @@
 export type Unite = "jour" | "semaine" | "mois" | "an";
 export type Ancrage = "realisation" | "fixe";
 
+/** Longueur maximale du message perso d'une notification envoyée à la demande. */
+export const MESSAGE_MAX = 200;
+
 /** Qui s'en charge : un seul choix. */
 export type Qui = "nous" | "prestataire" | "enfants";
 export const QUI: Record<Qui, string> = { nous: "Nous", prestataire: "Un prestataire", enfants: "Les enfants" };

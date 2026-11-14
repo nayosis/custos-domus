@@ -260,6 +260,32 @@ describe("notifications des enfants", () => {
   const abonner = (c: string, endpoint: string) =>
     s.requete("/api/enfant/notifications/abonnements", { corps: { endpoint, p256dh: "cle", auth: "auth", appareil: "Chrome sur Android" }, cookie: c });
 
+  test("notifier à la demande : rappel et message perso aux enfants choisis ; qui n'a pas de téléphone est signalé", async () => {
+    const a = await ok("creerEnfant", { prenom: "Oriane", pin: "4444" });
+    const b = await ok("creerEnfant", { prenom: "Pablo", pin: "5555" });
+    const { cookie: ca } = await connexionEnfant("Oriane", "4444");
+    const tel = "https://push.exemple/mael";
+    await abonner(ca, tel);
+    const m = await mission([a, b], { titre: "Nettoyer la chambre" });
+
+    const qui = await ok("destinatairesNotification");
+    expect(qui.enfants).toEqual(expect.arrayContaining([{ id: a, prenom: "Oriane", appareils: 1 }, { id: b, prenom: "Pablo", appareils: 0 }]));
+    // Le parent connecté ne se notifie pas lui-même.
+    expect(qui.parents.map((p: { nom: string }) => p.nom)).not.toContain(SUPER.email.split("@")[0]);
+
+    pushs.length = 0;
+    const r = await ok("notifierEntretien", m, { enfants: [a, b], message: "  et que ça saute  " });
+    expect(r).toEqual({ envoyees: 1, sansAppareil: ["Pablo"] });
+    expect(recus(tel)).toEqual([{ titre: "Rappel : Nettoyer la chambre", corps: "et que ça saute", url: "/enfant", tag: `custos-rappel-${m}` }]);
+    // Sans message : la date.
+    pushs.length = 0;
+    await ok("notifierEntretien", m, { enfants: [a] });
+    expect(recus(tel)[0].corps).toStartWith("Pour le ");
+
+    expect(await refuse("notifierEntretien", m, {})).toBe(400);
+    expect(await refuse("notifierEntretien", m, { enfants: [a], message: "x".repeat(201) })).toBe(400);
+  });
+
   test("son téléphone : réponses des parents, missions du jour à 8 h ; rien pour les autres", async () => {
     const a = await ok("creerEnfant", { prenom: "Kenza", pin: "1111" });
     const b = await ok("creerEnfant", { prenom: "Louis", pin: "2222" });
