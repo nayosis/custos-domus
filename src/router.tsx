@@ -60,8 +60,9 @@ export const accueilRoute = createRoute({
   getParentRoute: () => application,
   path: "/",
   component: AFaire,
-  validateSearch: (s: Record<string, unknown>): { maison?: string; qui?: string } => ({
+  validateSearch: (s: Record<string, unknown>): { maison?: string; qui?: string; vue?: "chrono" } => ({
     ...(typeof s.maison === "string" ? { maison: s.maison } : {}),
+    ...(s.vue === "chrono" ? { vue: "chrono" as const } : {}),
     ...(typeof s.qui === "string" && ["nous", "prestataire", "enfants"].includes(s.qui) ? { qui: s.qui } : {}),
   }),
 });

@@ -12,6 +12,7 @@ import { AvisMiseAJour } from "../components/MiseAJour";
 import { BadgeGarantie } from "../components/BadgeGarantie";
 import { BadgeSituation, Ligne, useActionsEntretiens } from "../components/Entretiens";
 import { Historique } from "../components/Historique";
+import { Chronologie } from "../components/Chronologie";
 import { dateLisible, euros } from "../lib/dates";
 import { estFrequente, QUI, quiDe, situation, type Qui, type Situation } from "../lib/entretiens";
 import { useEcran } from "../lib/ecran";
@@ -120,7 +121,7 @@ function Repli({ titre, children }: { titre: string; children: ReactNode }) {
  * pris, garanties, dernières interventions (l'historique de la maison quand on en regarde une), dépenses.
  */
 export function AFaire() {
-  const { maison: filtre, qui = "" } = accueilRoute.useSearch();
+  const { maison: filtre, qui = "", vue } = accueilRoute.useSearch();
   const naviguer = useNavigate();
   const { telephone } = useEcran();
   const { data: maisons } = useQuery({ queryKey: ["maisons"], queryFn: () => listeMaisons() });
@@ -133,9 +134,13 @@ export function AFaire() {
   const { actions, ajouter, modales } = useActionsEntretiens({ categorie: "Routines" });
 
   const avecMaison = actives.length > 1 && !filtre;
-  const filtrer = (p: { maison?: string | null; qui?: string }) => {
-    const suite = { maison: p.maison !== undefined ? p.maison : filtre, qui: p.qui !== undefined ? p.qui : qui };
-    naviguer({ to: "/", search: { ...(suite.maison ? { maison: suite.maison } : {}), ...(suite.qui ? { qui: suite.qui } : {}) }, replace: true });
+  const filtrer = (p: { maison?: string | null; qui?: string; vue?: "chrono" | null }) => {
+    const suite = { maison: p.maison !== undefined ? p.maison : filtre, qui: p.qui !== undefined ? p.qui : qui, vue: p.vue !== undefined ? p.vue : vue };
+    naviguer({
+      to: "/",
+      search: { ...(suite.maison ? { maison: suite.maison } : {}), ...(suite.qui ? { qui: suite.qui } : {}), ...(suite.vue ? { vue: suite.vue } : {}) },
+      replace: true,
+    });
   };
 
   // Ajouter sur la maison elle-même ; plusieurs maisons sans filtre : on choisit laquelle.
@@ -246,8 +251,23 @@ export function AFaire() {
                 <IconListCheck size={18} />
                 <Title order={4}>{qui ? `À faire · ${choixQui.find((c) => c.value === qui)?.label}` : "À faire"}</Title>
               </Group>
-              {boutonAjouter}
+              <Group gap="xs" wrap="nowrap">
+                <SegmentedControl
+                  size="xs"
+                  value={vue ?? "liste"}
+                  onChange={(v) => filtrer({ vue: v === "chrono" ? "chrono" : null })}
+                  data={[
+                    { value: "liste", label: "Liste" },
+                    { value: "chrono", label: "Chronologie" },
+                  ]}
+                />
+                {boutonAjouter}
+              </Group>
             </Group>
+            {vue === "chrono" ? (
+              <Chronologie entretiens={classes} aujourdhui={data.aujourdhui} actions={actions} />
+            ) : (
+              <>
             {rien && (
               <Group gap="sm" py="sm" wrap="nowrap">
                 <IconCircleCheck size={28} color="var(--mantine-color-green-6)" style={{ flexShrink: 0 }} />
@@ -301,6 +321,8 @@ export function AFaire() {
             <Text size="xs" c="dimmed" mt="sm">
               Ce qui revient chaque jour ou chaque semaine n'apparaît que le moment venu. Sur un équipement ou un véhicule, on ajoute depuis sa fiche.
             </Text>
+              </>
+            )}
           </Card>
         </Grid.Col>
 

@@ -93,6 +93,30 @@ export function prochaineEcheance(e: Recurrence, date: string): string | null {
 }
 
 /**
+ * Les fois prévues jusqu'au `fin` inclus (vue chronologique) : la fois actuelle (au rendez-vous s'il est pris),
+ * puis, pour une routine, les suivantes, en supposant chacune faite à sa date (aujourd'hui pour une fois en
+ * retard). `suivante` : une fois seulement prévue, pas encore d'actualité.
+ */
+export function occurrences(
+  e: Recurrence & { etat: string; dateRdv: string | null },
+  aujourdhui: string,
+  fin: string,
+  max = 100,
+): { date: string; suivante: boolean }[] {
+  const r = [{ date: e.etat === "rdv_pris" && e.dateRdv ? e.dateRdv : e.echeance, suivante: false }];
+  let cur = e.echeance;
+  let initiale = e.echeanceInitiale ?? null;
+  while (r.length < max) {
+    const suivante = prochaineEcheance({ ...e, echeance: cur, echeanceInitiale: initiale }, cur < aujourdhui ? aujourdhui : cur);
+    if (!suivante || suivante > fin) break;
+    r.push({ date: suivante, suivante: true });
+    cur = suivante;
+    initiale = null;
+  }
+  return r;
+}
+
+/**
  * Échéance suivante quand l'occurrence est passée (sautée) : toujours à partir de l'échéance d'origine,
  * en sautant celles déjà dépassées (la suivante peut tomber aujourd'hui). Null si l'entretien est ponctuel.
  */

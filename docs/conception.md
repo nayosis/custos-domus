@@ -122,4 +122,8 @@ les voitures, et les enfants à qui confier des choses. Décisions prises (novem
    repliées. Ce qui revient chaque jour ou chaque semaine n'apparaît que le moment venu. Filtres maison et qui
    s'en charge (`?maison=`, `?qui=`). À côté : rendez-vous pris, garanties, dernières interventions (l'historique
    de la maison à un clic), dépenses de l'année. « Ajouter » : sur la maison ; sur un élément, depuis sa fiche.
-4. À venir : vue chronologique (timeline) des choses à faire, sur le même filtre.
+4. Vue **chronologique** (fait) : bascule « Liste / Chronologie » sur l'écran À faire (`?vue=chrono`). Fil vertical
+   proportionnel au temps, de 5 jours passés à un horizon de 7, 14, 30 ou 60 jours (retenu sur l'appareil). Chaque
+   chose à sa date (le rendez-vous pris à son jour), les fois suivantes des routines en pointillés (`occurrences`,
+   chacune supposée faite à sa date) ; plus en retard que le fil : rappelé au-dessus. Un jour trop chargé : « +N ».
+   Chaque pastille ouvre ses actions.
