@@ -3,7 +3,7 @@ import {
   Alert, AppShell, Badge, Box, Burger, Button, Divider, Drawer, Group, Menu, Modal, NavLink, PasswordInput, Stack, Text, UnstyledButton, SegmentedControl, useMantineColorScheme,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconBell, IconBrandGithub, IconChevronUp, IconDatabaseExport, IconDots, IconHelp, IconHistory, IconHome, IconKey, IconCar, IconLayoutDashboard, IconListCheck, IconLogout, IconPackage, IconTool, IconUserCog, IconUsers } from "@tabler/icons-react";
+import { IconBell, IconBrandGithub, IconChevronUp, IconDatabaseExport, IconDots, IconHelp, IconHistory, IconHome, IconKey, IconCar, IconListCheck, IconLogout, IconPackage, IconTool, IconUserCog, IconUsers } from "@tabler/icons-react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { famille } from "../data/famille";
@@ -20,8 +20,7 @@ import { Logo } from "./Logo";
 type Entree = { to: string; label: string; court?: string; barre?: false; icone: typeof IconHome; actif: (p: string) => boolean };
 
 const ENTREES: Entree[] = [
-  { to: "/", label: "Tableau de bord", court: "Accueil", icone: IconLayoutDashboard, actif: (p) => p === "/" },
-  { to: "/a-faire", label: "À faire", icone: IconListCheck, actif: (p) => p.startsWith("/a-faire") },
+  { to: "/", label: "À faire", icone: IconListCheck, actif: (p) => p === "/" },
   { to: "/maisons", label: "Maisons", icone: IconHome, actif: (p) => p.startsWith("/maisons") },
   { to: "/elements", label: "Éléments", icone: IconPackage, actif: (p) => p.startsWith("/elements") },
   { to: "/vehicules", label: "Véhicules", barre: false, icone: IconCar, actif: (p) => p.startsWith("/vehicules") },

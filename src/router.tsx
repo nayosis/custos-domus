@@ -2,7 +2,6 @@ import { Outlet, createRootRoute, createRoute, createRouter, createBrowserHistor
 import type { ReactNode } from "react";
 import { Layout } from "./components/Layout";
 import { SurOrdinateur } from "./components/SurOrdinateur";
-import { Accueil } from "./pages/Accueil";
 import { AFaire } from "./pages/AFaire";
 import { Vehicules } from "./pages/Vehicules";
 import { Famille } from "./pages/Famille";
@@ -56,17 +55,24 @@ const reserveAdmin = () => {
   if (!estAdmin()) throw redirect({ to: "/" });
 };
 
+/** « À faire » : l'accueil ; filtres maison et « qui s'en charge » dans l'adresse. */
 export const accueilRoute = createRoute({
   getParentRoute: () => application,
   path: "/",
-  component: Accueil,
-  validateSearch: (s: Record<string, unknown>): { maison?: string } => (typeof s.maison === "string" ? { maison: s.maison } : {}),
+  component: AFaire,
+  validateSearch: (s: Record<string, unknown>): { maison?: string; qui?: string } => ({
+    ...(typeof s.maison === "string" ? { maison: s.maison } : {}),
+    ...(typeof s.qui === "string" && ["nous", "prestataire", "enfants"].includes(s.qui) ? { qui: s.qui } : {}),
+  }),
 });
-export const aFaireRoute = createRoute({
+/** Ancienne page « À faire » d'une maison : c'est l'accueil, filtré sur la maison. */
+const aFaireRoute = createRoute({
   getParentRoute: () => application,
   path: "/a-faire",
-  component: AFaire,
-  validateSearch: (s: Record<string, unknown>): { maison?: string } => (typeof s.maison === "string" ? { maison: s.maison } : {}),
+  beforeLoad: ({ search }) => {
+    const maison = (search as { maison?: unknown }).maison;
+    throw redirect({ to: "/", search: typeof maison === "string" ? { maison } : {} });
+  },
 });
 const maisons = createRoute({ getParentRoute: () => application, path: "/maisons", component: Maisons });
 export const elementsRoute = createRoute({

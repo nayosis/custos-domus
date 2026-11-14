@@ -110,3 +110,16 @@ les voitures, et les enfants à qui confier des choses. Décisions prises (novem
    quelque chose attend). Codes PIN masqués dans le journal. Page **Aide** (`/aide`, dans le menu) : les trois réglages d'une chose à faire et ce qui en découle. **Notifications** sur le téléphone de l'enfant (table `abonnement_push_enfant`
    dans comptes.db) : ses missions du jour et en retard à la tournée de 8 h, mission validée ou refusée, récompense
    accordée ou refusée ; retirées quand il quitte l'appareil (« Quitter »), quand le profil est désactivé ou supprimé. Ton sobre, pas enfantin.
+
+### Revue « à faire » (novembre 2026)
+
+1. Modèle (fait, migration 0007) : la nature disparaît au profit de trois réglages indépendants — fréquence (tâche ou
+   routine), qui s'en charge (nous, un prestataire, les enfants : l'un ou l'autre), prendre rendez-vous d'abord.
+2. Formulaire (fait) : dans cet ordre ; « Fait » en un geste garde « Fait, avec coût ou facture… » dans le menu.
+3. Un seul écran **À faire** (fait) : l'accueil (`/`), qui remplace le tableau de bord et la page « À faire » d'une
+   maison (`/a-faire?maison=` y renvoie, filtré). Rangé par moment : en retard, aujourd'hui, cette semaine (avec les
+   rendez-vous à prendre dont la fenêtre est ouverte), plus tard (3 mois) ; au-delà, et terminées ou suspendues :
+   repliées. Ce qui revient chaque jour ou chaque semaine n'apparaît que le moment venu. Filtres maison et qui
+   s'en charge (`?maison=`, `?qui=`). À côté : rendez-vous pris, garanties, dernières interventions (l'historique
+   de la maison à un clic), dépenses de l'année. « Ajouter » : sur la maison ; sur un élément, depuis sa fiche.
+4. À venir : vue chronologique (timeline) des choses à faire, sur le même filtre.

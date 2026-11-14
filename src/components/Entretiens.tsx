@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   ActionIcon, Alert, Badge, Box, Button, Card, Checkbox, Collapse, Group, Menu, Modal, MultiSelect, NumberInput, Radio, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Textarea, Title, UnstyledButton,
 } from "@mantine/core";
@@ -28,6 +28,8 @@ import { POINTS_DEFAUT } from "../lib/famille";
 import { ModalRealisation } from "./ModalRealisation";
 
 export type LigneEntretien = Entretien & { prestataireNom: string | null };
+/** Ligne venue d'une liste qui mélange éléments et maisons : de quoi retrouver le formulaire qui lui convient. */
+export type LigneAvecLieu = LigneEntretien & { elementType?: string | null; elementCategorie?: string | null };
 
 /** Mission : le prénom de l'enfant (« Enfants » si elle est partagée, ou de celui qui l'a faite) et les points. */
 export function BadgeMission({ e, suffixe }: { e: { points: number | null; enfantId: string | null }; suffixe?: string }) {
@@ -419,7 +421,7 @@ function ModalEntretien({
               { value: "enfants", label: QUI.enfants, disabled: m.enfants.length === 0 && v.qui !== "enfants" },
             ]}
           />
-          {v.qui === "nous" && (
+          {v.qui === "nous" && !v.avecRdv && (
             <Text size="xs" c="dimmed" mt={4}>
               « Fait » en un geste ; coût et facture restent possibles.
             </Text>
@@ -571,9 +573,10 @@ export function ModalEcheance({ cible, onClose }: { cible: { e: LigneEntretien; 
   );
 }
 
-function Ligne({
-  e, onModifier, onRdv, onFait, onFaitDetails, onEcheance,
-}: { e: LigneEntretien; onModifier: () => void; onRdv: () => void; onFait: () => void; onFaitDetails: () => void; onEcheance: (mode: "passer" | "reporter") => void }) {
+export type ActionsLigne = { onModifier: () => void; onRdv: () => void; onFait: () => void; onFaitDetails: () => void; onEcheance: (mode: "passer" | "reporter") => void };
+
+/** Une chose à faire, avec ses actions ; `ou` : où elle se trouve (dans une liste qui mélange les éléments). */
+export function Ligne({ e, ou, onModifier, onRdv, onFait, onFaitDetails, onEcheance }: { e: LigneEntretien; ou?: ReactNode } & ActionsLigne) {
   const s = situation(e, aujourdhui());
   const aPrendre = e.actif && e.avecRdv && e.etat !== "rdv_pris";
   // Bouton d'action seulement quand c'est d'actualité ; sinon, dans le menu.
@@ -608,6 +611,7 @@ function Ligne({
           <BadgeSituation e={e} s={s} />
           <BadgeMission e={e} />
         </Group>
+        {ou}
         <Text size="xs" c="dimmed">
           {genre(e)}
           {e.avecRdv ? " sur rendez-vous" : ""}
@@ -686,28 +690,59 @@ function Ligne({
   );
 }
 
+/**
+ * Actions sur des choses à faire et leurs fenêtres (modifier, rendez-vous, fait, reporter) : `actions(e)` pour une
+ * ligne, `ajouter(ou)` pour une nouvelle, et `modales` à placer dans la page. Par défaut, le formulaire d'un élément
+ * de la catégorie et du type donnés ; une ligne qui porte son type d'élément (LigneAvecLieu) l'emporte.
+ */
+export function useActionsEntretiens(defaut: { categorie?: string | null; vehicule?: boolean } = {}) {
+  const [edition, setEdition] = useState<{ entretien: Entretien | null; ou: Rattachement; categorie: string | null; vehicule: boolean } | null>(null);
+  const [rdv, setRdv] = useState<LigneEntretien | null>(null);
+  const [fait, setFait] = useState<LigneAvecLieu | null>(null);
+  const [echeance, setEcheance] = useState<{ e: LigneEntretien; mode: "passer" | "reporter" } | null>(null);
+  const vehicule = (e: LigneAvecLieu) => (e.elementType !== undefined ? e.elementType === "vehicule" : !!defaut.vehicule);
+  const actions = (e: LigneAvecLieu): ActionsLigne => ({
+    onModifier: () =>
+      setEdition({
+        entretien: e,
+        ou: e.elementId ? { elementId: e.elementId } : { maisonId: e.maisonId! },
+        categorie: e.elementCategorie !== undefined ? e.elementCategorie : (defaut.categorie ?? null),
+        vehicule: vehicule(e),
+      }),
+    onRdv: () => setRdv(e),
+    onFait: () => (faitEnUnGeste(e) ? faireEnUnGeste(e) : setFait(e)),
+    onFaitDetails: () => setFait(e),
+    onEcheance: (mode) => setEcheance({ e, mode }),
+  });
+  const ajouter = (ou: Rattachement, categorie = defaut.categorie ?? null, estVehicule = !!defaut.vehicule) =>
+    setEdition({ entretien: null, ou, categorie, vehicule: estVehicule });
+  const modales = (
+    <>
+      <ModalEntretien
+        ou={edition?.ou ?? { maisonId: "" }}
+        categorie={edition?.categorie ?? null}
+        vehicule={edition?.vehicule ?? false}
+        entretien={edition?.entretien ?? null}
+        opened={!!edition}
+        onClose={() => setEdition(null)}
+      />
+      <ModalRdv entretien={rdv} onClose={() => setRdv(null)} />
+      <ModalEcheance cible={echeance} onClose={() => setEcheance(null)} />
+      <ModalRealisation cible={fait ? { mode: "entretien", entretien: fait } : null} vehicule={fait ? vehicule(fait) : false} onClose={() => setFait(null)} />
+    </>
+  );
+  return { actions, ajouter, modales };
+}
+
 /** Choses à faire d'un élément ou d'une maison : en cours, et celles qui sont terminées ou suspendues (repliées). */
 export function Entretiens({
   ou, categorie, entretiens, archive, vehicule = false,
 }: { ou: Rattachement; categorie: string | null; entretiens: LigneEntretien[]; archive: boolean; vehicule?: boolean }) {
-  const [edition, setEdition] = useState<{ entretien: Entretien | null } | null>(null);
-  const [rdv, setRdv] = useState<LigneEntretien | null>(null);
-  const [fait, setFait] = useState<LigneEntretien | null>(null);
-  const [echeance, setEcheance] = useState<{ e: LigneEntretien; mode: "passer" | "reporter" } | null>(null);
+  const { actions, ajouter, modales } = useActionsEntretiens({ categorie, vehicule });
   const [voirInactifs, setVoirInactifs] = useState(false);
   const actifs = entretiens.filter((e) => e.actif);
   const inactifs = entretiens.filter((e) => !e.actif);
-  const ligne = (e: LigneEntretien) => (
-    <Ligne
-      key={e.id}
-      e={e}
-      onModifier={() => setEdition({ entretien: e })}
-      onRdv={() => setRdv(e)}
-      onFait={() => (faitEnUnGeste(e) ? faireEnUnGeste(e) : setFait(e))}
-      onFaitDetails={() => setFait(e)}
-      onEcheance={(mode) => setEcheance({ e, mode })}
-    />
-  );
+  const ligne = (e: LigneEntretien) => <Ligne key={e.id} e={e} {...actions(e)} />;
 
   return (
     <Card withBorder>
@@ -717,7 +752,7 @@ export function Entretiens({
           <Title order={4}>À faire</Title>
         </Group>
         {!archive && (
-          <Button size="xs" leftSection={<IconPlus size={16} />} onClick={() => setEdition({ entretien: null })}>
+          <Button size="xs" leftSection={<IconPlus size={16} />} onClick={() => ajouter(ou)}>
             Ajouter
           </Button>
         )}
@@ -748,11 +783,7 @@ export function Entretiens({
           </Collapse>
         </>
       )}
-
-      <ModalEntretien ou={ou} categorie={categorie} vehicule={vehicule} entretien={edition?.entretien ?? null} opened={!!edition} onClose={() => setEdition(null)} />
-      <ModalRdv entretien={rdv} onClose={() => setRdv(null)} />
-      <ModalEcheance cible={echeance} onClose={() => setEcheance(null)} />
-      <ModalRealisation cible={fait ? { mode: "entretien", entretien: fait } : null} vehicule={vehicule} onClose={() => setFait(null)} />
+      {modales}
     </Card>
   );
 }
