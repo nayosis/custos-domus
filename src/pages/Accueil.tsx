@@ -102,8 +102,8 @@ function Ou({
 }
 
 function LigneAFaire({
-  e, avecMaison, onRdv, onFait, onEcheance,
-}: { e: Classe; avecMaison: boolean; onRdv: () => void; onFait: () => void; onEcheance: (mode: "passer" | "reporter") => void }) {
+  e, avecMaison, onRdv, onFait, onFaitDetails, onEcheance,
+}: { e: Classe; avecMaison: boolean; onRdv: () => void; onFait: () => void; onFaitDetails: () => void; onEcheance: (mode: "passer" | "reporter") => void }) {
   const aPrendre = e.avecRdv && e.etat !== "rdv_pris";
   return (
     <Group gap="sm" wrap="nowrap" py="xs" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
@@ -130,6 +130,11 @@ function LigneAFaire({
           {aPrendre && (
             <Menu.Item leftSection={<IconCheck size={14} />} onClick={onFait}>
               Marquer comme fait
+            </Menu.Item>
+          )}
+          {faitEnUnGeste(e) && (
+            <Menu.Item leftSection={<IconReceipt size={14} />} onClick={onFaitDetails}>
+              Fait, avec coût ou facture…
             </Menu.Item>
           )}
           <Menu.Item leftSection={<IconClockPause size={14} />} onClick={() => onEcheance("reporter")}>
@@ -262,6 +267,7 @@ export function Accueil() {
                       avecMaison={avecMaison}
                       onRdv={() => setRdv(e)}
                       onFait={() => (faitEnUnGeste(e) ? faireEnUnGeste(e) : setFait(e))}
+                      onFaitDetails={() => setFait(e)}
                       onEcheance={(mode) => setEcheance({ e: e as LigneEntretien, mode })}
                     />
                   ))}

@@ -7,7 +7,7 @@ import { notifications } from "@mantine/notifications";
 import { TimeInput } from "@mantine/dates";
 import {
   IconCalendarCheck, IconCalendarEvent, IconCalendarX, IconCheck, IconChevronDown, IconChevronRight, IconClockPause, IconDots, IconPlayerPause, IconPlayerPlay,
-  IconPlayerSkipForward, IconPencil, IconPlus, IconListCheck, IconRotateClockwise, IconTool, IconTrash,
+  IconPlayerSkipForward, IconPencil, IconPlus, IconListCheck, IconReceipt, IconRotateClockwise, IconTool, IconTrash,
   IconUser,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
@@ -17,8 +17,8 @@ import {
 import type { Entretien, ModeleEntretien } from "../db/schema";
 import { aujourdhui, dateLisible, duree } from "../lib/dates";
 import {
-  ajouter, delaiDefaut, DUREES_RDV, echeanceApresPassage, estFrequente, estRecurrent, faitEnUnGeste, genre, libelleDelai, libelleDuree, libelleHeure, libelleIntervalle, situation,
-  type Situation, type Unite,
+  ajouter, delaiDefaut, DUREES_RDV, QUI, quiDe, echeanceApresPassage, estFrequente, estRecurrent, faitEnUnGeste, genre, libelleDelai, libelleDuree, libelleHeure, libelleIntervalle, situation,
+  type Qui, type Situation, type Unite,
 } from "../lib/entretiens";
 import { ecrire } from "../lib/query";
 import { km, libelleKm } from "../lib/vehicules";
@@ -93,6 +93,8 @@ export function BadgeSituation({ e, s }: { e: Pick<Entretien, "avecRdv" | "echea
 
 type Saisie = {
   titre: string;
+  /** Qui s'en charge : nous, un prestataire (prestataireId) ou les enfants (useMission). */
+  qui: Qui;
   /** Il faut d'abord prendre rendez-vous. */
   avecRdv: boolean;
   periodique: boolean;
@@ -114,6 +116,7 @@ type Saisie = {
 
 const VIDE: Saisie = {
   titre: "",
+  qui: "nous",
   avecRdv: false,
   periodique: true,
   intervalleValeur: 1,
@@ -146,6 +149,7 @@ function avecDefauts(s: Saisie): Saisie {
 
 const depuis = (e: Entretien): Saisie => ({
   titre: e.titre,
+  qui: quiDe(e),
   avecRdv: e.avecRdv,
   periodique: estRecurrent(e) || !!e.intervalleKm,
   intervalleValeur: e.intervalleValeur ?? 1,
@@ -164,8 +168,8 @@ const depuis = (e: Entretien): Saisie => ({
 });
 
 /**
- * Confier aux enfants : un enfant (la sienne) ou plusieurs (partagée : le premier qui la fait gagne les points), et les points.
- * `mission` vaut undefined tant que les enfants d'une mission existante n'est pas chargé (rien n'est alors envoyé).
+ * Les enfants à qui elle est confiée : un (la sienne) ou plusieurs (partagée : le premier qui la fait gagne les points), et les points.
+ * `pret` est faux tant que les enfants d'une mission existante ne sont pas chargés (rien n'est alors envoyé).
  */
 function useMission(entretien: Entretien | null, opened: boolean) {
   const { data: enfants = [] } = useQuery({ queryKey: ["enfants"], queryFn: () => listeEnfants(), enabled: opened });
@@ -182,27 +186,16 @@ function useMission(entretien: Entretien | null, opened: boolean) {
   }
   if (choix === null && tour) setChoix(tour);
   const valeur = choix ?? [];
-  const points = typeof pts === "number" ? pts : POINTS_DEFAUT;
-  const champ =
-    enfants.length === 0 ? null : (
-      <Card withBorder p="sm">
-        <Stack gap="xs">
-          <MultiSelect
-            label="Confier aux enfants"
-            description={valeur.length > 1 ? "Partagée : n'importe lequel peut la faire, celui qui la fait gagne les points" : "Plusieurs : partagée, le premier qui la fait gagne les points"}
-            placeholder={valeur.length ? undefined : "Personne : ce n'est pas une mission"}
-            data={enfants.filter((e) => e.actif || valeur.includes(e.id)).map((e) => ({ value: e.id, label: e.prenom }))}
-            value={valeur}
-            onChange={setChoix}
-            clearable
-          />
-          {valeur.length > 0 && (
-            <NumberInput label="Points" description="Gagnés une fois la mission validée par un parent" min={0} max={1000} allowDecimal={false} value={pts} onChange={setPts} w={200} />
-          )}
-        </Stack>
-      </Card>
-    );
-  return { champ, mission: choix === null ? undefined : valeur.length ? { enfants: valeur, points } : null };
+  return {
+    enfants: enfants.filter((e) => e.actif || valeur.includes(e.id)),
+    valeur,
+    setChoix,
+    pts,
+    setPts,
+    pret: choix !== null,
+    estMission,
+    mission: { enfants: valeur, points: typeof pts === "number" ? pts : POINTS_DEFAUT },
+  };
 }
 
 /** Création (entretien absent), éventuellement depuis un modèle de la bibliothèque, ou modification. */
@@ -221,7 +214,9 @@ function ModalEntretien({
     if (opened) setV(entretien ? depuis(entretien) : ou.maisonId ? avecDefauts({ ...VIDE, intervalleUnite: "semaine" }) : avecDefauts(VIDE));
   }
   const maj = (p: Partial<Saisie>) => setV((s) => avecDefauts({ ...s, ...p }));
-  const { champ: champMission, mission } = useMission(entretien, opened);
+  const m = useMission(entretien, opened);
+  /** Qui s'en charge : le rendez-vous se coche d'office avec un prestataire ; les enfants ne prennent pas de rendez-vous. */
+  const choisirQui = (qui: Qui) => maj({ qui, ...(qui === "prestataire" && v.qui !== "prestataire" ? { avecRdv: true } : qui === "enfants" ? { avecRdv: false } : {}) });
 
   // Modèles de la catégorie de l'élément en premier, puis les autres.
   const choixModeles = useMemo(() => {
@@ -254,11 +249,13 @@ function ModalEntretien({
   // Échéance qui sera retenue à la création : saisie, sinon dernière fois + intervalle, sinon aujourd'hui.
   const echeancePrevue = v.echeance ?? (v.periodique && v.derniere && valeur ? ajouter(v.derniere, valeur, v.intervalleUnite) : aujourdhui());
   const delai = typeof v.delai === "number" ? v.delai : 0;
-  // Qui s'en charge : un seul choix ; confiée aux enfants, pas de prestataire.
-  const auxEnfants = !!mission?.enfants.length;
   const intervalleKm = vehicule && v.periodique && typeof v.intervalleKm === "number" && v.intervalleKm >= 100 ? v.intervalleKm : null;
   // Au kilométrage, l'intervalle de temps devient facultatif (« tous les 40 000 km »).
-  const valide = v.titre.trim() && (!v.periodique || valeur >= 1 || intervalleKm) && typeof v.delai === "number" && (!entretien || v.echeance);
+  // Qui s'en charge : un prestataire choisi, ou au moins un enfant.
+  const quiComplet = v.qui === "nous" || (v.qui === "prestataire" ? !!v.prestataireId : m.pret && m.valeur.length > 0);
+  const valide = v.titre.trim() && (!v.periodique || valeur >= 1 || intervalleKm) && typeof v.delai === "number" && (!entretien || v.echeance) && quiComplet;
+  // Mission : envoyée si confiée aux enfants ; retirée si elle l'était et ne l'est plus ; sinon rien.
+  const mission = v.qui === "enfants" ? m.mission : m.estMission ? null : undefined;
 
   const enregistrer = async () => {
     const valeurs = {
@@ -269,7 +266,7 @@ function ModalEntretien({
       intervalleKm,
       ancrage: v.ancrage,
       delaiAlerteJours: delai,
-      prestataireId: auxEnfants ? null : v.prestataireId,
+      prestataireId: v.qui === "prestataire" ? v.prestataireId : null,
       notes: v.notes,
       ...(mission !== undefined ? { mission } : {}),
     };
@@ -408,6 +405,53 @@ function ModalEntretien({
             onChange={(d) => maj({ echeance: d })}
           />
         </SimpleGrid>
+        <div>
+          <Text size="sm" fw={500} mb={4}>
+            Qui s'en charge
+          </Text>
+          <SegmentedControl
+            fullWidth
+            value={v.qui}
+            onChange={(q) => choisirQui(q as Qui)}
+            data={[
+              { value: "nous", label: QUI.nous },
+              { value: "prestataire", label: QUI.prestataire },
+              { value: "enfants", label: QUI.enfants, disabled: m.enfants.length === 0 && v.qui !== "enfants" },
+            ]}
+          />
+          {v.qui === "nous" && (
+            <Text size="xs" c="dimmed" mt={4}>
+              « Fait » en un geste ; coût et facture restent possibles.
+            </Text>
+          )}
+          {v.qui === "enfants" && m.enfants.length === 0 && (
+            <Text size="xs" c="dimmed" mt={4}>
+              Ajoutez d'abord les enfants dans la page Famille.
+            </Text>
+          )}
+        </div>
+        {v.qui === "prestataire" && <ChampPrestataire label="Prestataire" value={v.prestataireId} onChange={(p) => maj({ prestataireId: p })} />}
+        {v.qui === "enfants" && m.enfants.length > 0 && (
+          <Group grow align="flex-start">
+            <MultiSelect
+              label="Enfants"
+              description={m.valeur.length > 1 ? "Partagée : le premier qui la fait gagne les points" : "Plusieurs : partagée, le premier qui la fait gagne les points"}
+              placeholder={m.valeur.length ? undefined : "Au moins un enfant"}
+              data={m.enfants.map((e) => ({ value: e.id, label: e.prenom }))}
+              value={m.valeur}
+              onChange={m.setChoix}
+            />
+            <NumberInput label="Points" description="Gagnés une fois validée par un parent" min={0} max={1000} allowDecimal={false} value={m.pts} onChange={m.setPts} />
+          </Group>
+        )}
+        {v.qui !== "enfants" && (
+          <Checkbox
+            label="Il faut d'abord prendre rendez-vous"
+            description="Une étape en plus, « rendez-vous pris » : relancé tant qu'il n'est pas pris, puis rappel la veille."
+            checked={v.avecRdv}
+            onChange={(x) => maj({ avecRdv: x.currentTarget.checked })}
+          />
+        )}
         <NumberInput
           label="Me prévenir"
           description={delai ? `${libelleDelai(delai)} avant l'échéance${v.avecRdv ? " : le temps de trouver un créneau" : ""}` : "Le jour de l'échéance"}
@@ -417,14 +461,6 @@ function ModalEntretien({
           allowDecimal={false}
           value={v.delai}
           onChange={(x) => maj({ delai: x, delaiModifie: true })}
-        />
-        {!auxEnfants && <ChampPrestataire label="Prestataire habituel" value={v.prestataireId} onChange={(p) => maj({ prestataireId: p, ...(p && !v.prestataireId ? { avecRdv: true } : {}) })} />}
-        {champMission}
-        <Checkbox
-          label="Il faut d'abord prendre rendez-vous"
-          description="Une étape en plus, « rendez-vous pris » : relancé tant qu'il n'est pas pris, puis rappel la veille."
-          checked={v.avecRdv}
-          onChange={(x) => maj({ avecRdv: x.currentTarget.checked })}
         />
         <Textarea label="Notes" autosize minRows={2} value={v.notes} onChange={(e) => maj({ notes: e.currentTarget.value })} />
         <Button onClick={enregistrer} disabled={!valide}>
@@ -536,8 +572,8 @@ export function ModalEcheance({ cible, onClose }: { cible: { e: LigneEntretien; 
 }
 
 function Ligne({
-  e, onModifier, onRdv, onFait, onEcheance,
-}: { e: LigneEntretien; onModifier: () => void; onRdv: () => void; onFait: () => void; onEcheance: (mode: "passer" | "reporter") => void }) {
+  e, onModifier, onRdv, onFait, onFaitDetails, onEcheance,
+}: { e: LigneEntretien; onModifier: () => void; onRdv: () => void; onFait: () => void; onFaitDetails: () => void; onEcheance: (mode: "passer" | "reporter") => void }) {
   const s = situation(e, aujourdhui());
   const aPrendre = e.actif && e.avecRdv && e.etat !== "rdv_pris";
   // Bouton d'action seulement quand c'est d'actualité ; sinon, dans le menu.
@@ -605,6 +641,11 @@ function Ligne({
               Marquer comme fait
             </Menu.Item>
           )}
+          {e.actif && faitEnUnGeste(e) && (
+            <Menu.Item leftSection={<IconReceipt size={14} />} onClick={onFaitDetails}>
+              Fait, avec coût ou facture…
+            </Menu.Item>
+          )}
           {e.etat === "rdv_pris" && (
             <>
               <Menu.Item leftSection={<IconCalendarEvent size={14} />} onClick={onRdv}>
@@ -663,6 +704,7 @@ export function Entretiens({
       onModifier={() => setEdition({ entretien: e })}
       onRdv={() => setRdv(e)}
       onFait={() => (faitEnUnGeste(e) ? faireEnUnGeste(e) : setFait(e))}
+      onFaitDetails={() => setFait(e)}
       onEcheance={(mode) => setEcheance({ e, mode })}
     />
   );
